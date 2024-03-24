@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'users.apps.UsersConfig',
     'my_test_app.apps.MyTestAppConfig',
+    'customer_interface.apps.CustomerInterfaceConfig',
     'social_django',
 ]
 

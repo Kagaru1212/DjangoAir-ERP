@@ -1,0 +1,28 @@
+{% extends "base_user_interface.html" %}
+
+{% block content %}
+    <h1>Заполнение билетов для заказа {{ order_id }}</h1>
+    {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+                <li>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+    <form method="post">
+        {% csrf_token %}
+        {{ formset.management_form }}
+        {% for form in formset %}
+            {{ form.as_p }}
+            {% if form.errors %}
+                <div class="errorlist">
+                    {% for error in form.errors %}
+                        <span class="error">{{ error }}</span>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endfor %}
+        <button type="submit">Submit</button>
+    </form>
+{% endblock %}
+
