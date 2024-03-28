@@ -1,7 +1,6 @@
+from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
-from django.db.models.signals import post_save
-from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
 
 
@@ -13,14 +12,20 @@ class Airplane(models.Model):
         return f"Airplane with {self.economy_seats} economy seats and {self.business_seats} business seats"
 
 
+class Facilities(models.Model):
+    breakfast = models.BooleanField(default=True)
+    toilet = models.BooleanField(default=True)
+
+    objects = models.Manager()
+
+
 class Flight(models.Model):
     date_time_of_departure = models.DateTimeField()
     date_time_of_arrival = models.DateTimeField()
     place_of_departure = models.CharField(max_length=100)
     place_of_arrival = models.CharField(max_length=100)
-    lunch = models.BooleanField(default=False)
-    luggage = models.BooleanField(default=False)
     airplane = models.ForeignKey(Airplane, on_delete=models.CASCADE, related_name='flights')
+    facilities = models.ManyToManyField(Facilities, through="FlightFacilities")
     available_economy_seats = models.IntegerField(editable=False, default=0)
     available_business_seats = models.IntegerField(editable=False, default=0)
 
@@ -29,38 +34,49 @@ class Flight(models.Model):
     def __str__(self):
         return f"Flight from {self.place_of_departure} to {self.place_of_arrival} at {self.date_time_of_departure}"
 
-
-@receiver(post_save, sender=Flight)
-def update_available_seats(sender, instance, created, **kwargs):
-    """
-    Here in the 'Flight' model, the values of the airplane seats are automatically
-    substituted to the values that will be available on a particular flight.
-    """
-    if created and not kwargs.get('raw', False):  # Add creation check via the administrative interface
-        instance.available_economy_seats = instance.airplane.economy_seats
-        instance.available_business_seats = instance.airplane.business_seats
-        instance.save()
+    def clean(self):
+        if not self.pk:  # check if object is being created
+            self.available_economy_seats = self.airplane.economy_seats
+            self.available_business_seats = self.airplane.business_seats
+        available_economy_seats = set(range(1, self.available_economy_seats + 1))
+        available_business_seats = set(range(1, self.available_business_seats + 1))
+        print(available_economy_seats)
+        print(available_business_seats)
+        super().clean()
 
 
-class Order(models.Model):
+class FlightFacilities(models.Model):
+    facilities = models.ForeignKey(Facilities, on_delete=models.CASCADE)
     flight = models.ForeignKey(Flight, on_delete=models.CASCADE)
-    departure_place = models.CharField(max_length=100)
-    arrival_place = models.CharField(max_length=100)
-    departure_time = models.DateTimeField()
-    number_of_tickets = models.IntegerField()
+    lunch = models.BooleanField(default=False)
+    lunch_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    luggage = models.BooleanField(default=False)
+    luggage_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     objects = models.Manager()
 
-    def __str__(self):
-        return f"Order for flight {self.flight} with {self.number_of_tickets} tickets"
+
+class Order(models.Model):
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
+    created_order = models.DateTimeField(auto_now_add=True)
+
+    objects = models.Manager()
 
 
 class Ticket(models.Model):
     flight = models.ForeignKey(Flight, on_delete=models.CASCADE)
     order = models.ForeignKey(Order, on_delete=models.CASCADE)
+    flight_facilities = models.ManyToManyField(Facilities, through="TicketFacilities")
     seat_class = models.CharField(max_length=10, choices=[('economy', _('Economy')), ('business', _('Business'))])
-    luggage = models.BooleanField(default=False)
-    lunch = models.BooleanField(default=False)
+    seat_number = models.PositiveIntegerField()
 
-    def __str__(self):
-        return f"Ticket for flight {self.flight} ({self.seat_class})"
+    objects = models.Manager()
+
+    class Meta:
+        unique_together = ('flight', 'seat_class', 'seat_number')
+
+
+class TicketFacilities(models.Model):
+    facilities = models.ForeignKey(Facilities, on_delete=models.CASCADE)
+    ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE)
+    count = models.IntegerField()
