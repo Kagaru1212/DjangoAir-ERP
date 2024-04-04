@@ -24,6 +24,7 @@ urlpatterns = [
     path("", IndexView.as_view(), name='index'),
     path('order/', include('customer_interface.urls', namespace='customer_interface')),
     path("users/", include('users.urls'), ),
-    path('social-auth/', include('social_django.urls', namespace='social'))
+    path('social-auth/', include('social_django.urls', namespace='social')),
+    path("__debug__/", include('debug_toolbar.urls'), ),
 ]
 

@@ -6,6 +6,6 @@ from customer_interface import views
 app_name = "customer_interface"
 
 urlpatterns = [
-    path("create_order/", views.create_order, name="order"),
-    path("ticket_configuration/", views.ticket_configuration, name="ticket_configuration"),
+    path("create_ticket/", views.create_ticket, name="create_ticket"),
+    path('create_ticket/<int:order_id>/', views.create_ticket, name='create_ticket_with_order_id'),
 ]

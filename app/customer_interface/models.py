@@ -3,10 +3,12 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from customer_interface.validators import create_ticket_validator, update_ticket_validator
+
 
 class Airplane(models.Model):
     economy_seats = models.IntegerField(validators=[MinValueValidator(20), MaxValueValidator(60)])
-    business_seats = models.IntegerField(validators=[MinValueValidator(12), MaxValueValidator(25)])
+    business_seats = models.IntegerField(validators=[MinValueValidator(6), MaxValueValidator(25)])
 
     def __str__(self):
         return f"Airplane with {self.economy_seats} economy seats and {self.business_seats} business seats"
@@ -38,10 +40,6 @@ class Flight(models.Model):
         if not self.pk:  # check if object is being created
             self.available_economy_seats = self.airplane.economy_seats
             self.available_business_seats = self.airplane.business_seats
-        available_economy_seats = set(range(1, self.available_economy_seats + 1))
-        available_business_seats = set(range(1, self.available_business_seats + 1))
-        print(available_economy_seats)
-        print(available_business_seats)
         super().clean()
 
 
@@ -66,17 +64,20 @@ class Order(models.Model):
 class Ticket(models.Model):
     flight = models.ForeignKey(Flight, on_delete=models.CASCADE)
     order = models.ForeignKey(Order, on_delete=models.CASCADE)
-    flight_facilities = models.ManyToManyField(Facilities, through="TicketFacilities")
+    # flight_facilities = models.ManyToManyField(FlightFacilities, through="TicketFacilities")
     seat_class = models.CharField(max_length=10, choices=[('economy', _('Economy')), ('business', _('Business'))])
-    seat_number = models.PositiveIntegerField()
+    seat_number = models.PositiveIntegerField(blank=True, null=True)
 
     objects = models.Manager()
 
-    class Meta:
-        unique_together = ('flight', 'seat_class', 'seat_number')
+    def clean(self):
+        if self._state.adding:
+            create_ticket_validator(self.seat_class, self.seat_number, self.flight, Ticket)
+        else:
+            update_ticket_validator(self.seat_class, self.seat_number, self.flight, Ticket)
 
 
 class TicketFacilities(models.Model):
-    facilities = models.ForeignKey(Facilities, on_delete=models.CASCADE)
+    flight_facilities = models.ForeignKey(FlightFacilities, on_delete=models.CASCADE)
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE)
     count = models.IntegerField()
