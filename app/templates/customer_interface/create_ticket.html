@@ -4,6 +4,12 @@
 <body>
     <h1>Create Ticket</h1>
 
+    {% if ticket_form.errors %}
+        {% for error in ticket_form.errors %}
+            <h3>Error:</h3>
+        {% endfor %}
+    {% endif %}
+
     <form method="post" action="{% url 'customer_interface:create_ticket' %}">
         {% csrf_token %}
         <input type="hidden" name="order_id" value="{{ order_id }}">
