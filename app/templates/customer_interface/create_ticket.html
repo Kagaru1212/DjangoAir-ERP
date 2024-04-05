@@ -1,0 +1,28 @@
+{% extends "base_user_interface.html" %}
+
+{% block content %}
+<body>
+    <h1>Create Ticket</h1>
+
+    {% if ticket_form.errors %}
+        {% for error in ticket_form.errors %}
+            <h3>Error:</h3>
+        {% endfor %}
+    {% endif %}
+
+    <form method="post" action="{% url 'customer_interface:create_ticket' %}">
+        {% csrf_token %}
+        <input type="hidden" name="order_id" value="{{ order_id }}">
+        {{ ticket_form.as_p }}
+        <button type="submit" name="submit">Submit</button>
+        <button type="submit" name="add_ticket">Add Ticket</button>
+    </form>
+
+    <h2>Current Tickets:</h2>
+    <ul>
+        {% for ticket_data in session_data %}
+            <li>{{ ticket_data }}</li>
+        {% endfor %}
+    </ul>
+</body>
+{% endblock %}

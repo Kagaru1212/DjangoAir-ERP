@@ -10,7 +10,13 @@
           crossorigin="anonymous">
 </head>
 <h1>Home page.</h1>
-
+<body>
+    <form method="post" action="{% url 'customer_interface:create_ticket' %}">
+        {% csrf_token %}
+        <input type="hidden" name="order_id" value="{{ order_id }}">
+        <button type="submit" class="btn btn-primary">Create Order</button>
+    </form>
+</body>
 
 {% block content %}
 {% endblock %}
