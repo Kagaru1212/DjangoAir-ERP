@@ -1,8 +1,12 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-
 from customer_interface.validators import create_ticket_validator, update_ticket_validator
 
 
@@ -66,7 +70,9 @@ class Ticket(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE)
     # flight_facilities = models.ManyToManyField(FlightFacilities, through="TicketFacilities")
     seat_class = models.CharField(max_length=10, choices=[('economy', _('Economy')), ('business', _('Business'))])
-    seat_number = models.PositiveIntegerField(blank=True, null=True)
+    seat_number = models.PositiveIntegerField(blank=True, null=True, default=None)
+    is_active = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     objects = models.Manager()
 
@@ -75,6 +81,19 @@ class Ticket(models.Model):
             create_ticket_validator(self.seat_class, self.seat_number, self.flight, Ticket)
         else:
             update_ticket_validator(self.seat_class, self.seat_number, self.flight, Ticket)
+
+
+@receiver(post_save, sender=Ticket)
+def schedule_deletion(sender, instance, created, **kwargs):
+    from .tasks import delete_inactive
+    if not instance.is_active:
+        # If the object is created for the first time and the created flag is True, schedule a deletion task.
+        if created:
+            delete_inactive.apply_async(args=[instance.id], countdown=60)  # Schedule a task 60 seconds after saving.
+        else:
+            # If the object has been modified, check if more than 1 minute has passed since it was created.
+            if timezone.now() - instance.created_at > timedelta(minutes=1):
+                delete_inactive.apply_async(args=[instance.id])
 
 
 class TicketFacilities(models.Model):

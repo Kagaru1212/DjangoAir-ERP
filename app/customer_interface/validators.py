@@ -45,6 +45,11 @@ def update_ticket_validator(seat_class, seat_number, flight, Ticket):
     if seat_class == 'economy':
         all_economy_seat = set(range(1, flight.available_economy_seats + 1))
         if seat_number is not None:
+            try:
+                seat_number = int(seat_number)
+            except ValueError:
+                raise ValidationError('Not a valid seat number')
+
             if seat_number not in all_economy_seat:
                 raise ValidationError('Not a valid seat number')
         busy_tickets = Ticket.objects.filter(flight=flight, seat_class=seat_class)
@@ -56,6 +61,11 @@ def update_ticket_validator(seat_class, seat_number, flight, Ticket):
     if seat_class == 'business':
         all_business_seat = set(range(1, flight.available_business_seats + 1))
         if seat_number is not None:
+            try:
+                seat_number = int(seat_number)
+            except ValueError:
+                raise ValidationError('Not a valid seat number')
+
             if seat_number not in all_business_seat:
                 raise ValidationError('Not a valid seat number')
         busy_tickets = Ticket.objects.filter(flight=flight, seat_class=seat_class)
