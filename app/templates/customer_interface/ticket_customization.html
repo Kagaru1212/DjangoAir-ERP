@@ -1,0 +1,34 @@
+{% extends "base_user_interface.html" %}
+
+{% block content %}
+<body>
+    <h1>Ticket Customization</h1>
+
+    {% if messages %}
+        <ul>
+            {% for message in messages %}
+                <li>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+
+        {% for ticket in order_tickets %}
+            <h3>Ticket {{ forloop.counter }}</h3>
+            <p>Flight: {{ ticket.flight }}</p>
+            <p>Seat Class: {{ ticket.seat_class }}</p>
+            {% if ticket.seat_class == 'economy' %}
+                <p>Free Seats: {{ free_economy_seats }}</p>
+            {% elif ticket.seat_class == 'business' %}
+                <p>Free Seats: {{ free_business_seats }}</p>
+            {% endif %}
+            <label for="seat_number_{{ ticket.id }}">Seat Number:</label>
+            <input type="text" name="seat_number_{{ ticket.id }}" id="seat_number_{{ ticket.id }}" value="{{ ticket.seat_number|default_if_none:'' }}">
+        {% endfor %}
+
+        <button type="submit">Save</button>
+    </form>
+</body>
+{% endblock %}

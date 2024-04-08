@@ -14,14 +14,14 @@
         {% csrf_token %}
         <input type="hidden" name="order_id" value="{{ order_id }}">
         {{ ticket_form.as_p }}
-        <button type="submit" name="submit">Submit</button>
+        <button type="submit" name="next">Next</button>
         <button type="submit" name="add_ticket">Add Ticket</button>
     </form>
 
     <h2>Current Tickets:</h2>
     <ul>
-        {% for ticket_data in session_data %}
-            <li>{{ ticket_data }}</li>
+        {% for ticket in order_tickets %}
+            <li>Ticket Flight: {{ ticket.flight }}, Seat Class: {{ ticket.seat_class }}</li>
         {% endfor %}
     </ul>
 </body>

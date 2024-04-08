@@ -13,6 +13,19 @@ services:
     depends_on:
       - pgdb
 
+  redis:
+    image: "redis:latest"
+    ports:
+      - "6379:6379"
+
+  celery-worker:
+    build: ./app
+    env_file:
+      - .env.dev
+    command: celery -A DjangoAir worker -l INFO
+    depends_on:
+      - redis
+
   pgdb:
     image: postgres:latest
     env_file:
