@@ -1,40 +1,96 @@
+from functools import wraps
+
+from django.contrib import messages
 from django.db import transaction
-from django.shortcuts import render, redirect
-from .forms import TicketForm
-from .models import Ticket, Order
-from .validators import update_ticket_validator
+from django.shortcuts import render, redirect, get_object_or_404
+
+from .decorators import process_exception
+from .forms import TicketForm, TicketSelectionForm
+from .models import Ticket, Order, Basket
+from .validators import update_ticket_validator, create_ticket_validator
 
 
-def create_ticket(request, order_id=None):
-    if not order_id:
-        order_id = request.POST.get('order_id')
+def basket_view(request):
+    user = request.user
+    basket = Basket.objects.get(user=user)
 
-    order = Order.objects.get(id=order_id)
-    order_tickets = Ticket.objects.filter(order=order)
+    tickets = basket.tickets.all()
 
     if request.method == 'POST':
         if 'add_ticket' in request.POST:
             ticket_form = TicketForm(request.POST)
-            if ticket_form.is_valid():  # ticket creation
+            if ticket_form.is_valid():
                 ticket = ticket_form.save(commit=False)
-                ticket.order = order
+                create_ticket_validator(ticket.seat_class, ticket.seat_number, ticket.flight, Ticket)
                 ticket.save()
-                return redirect('customer_interface:create_ticket_with_order_id', order_id=order_id)
+                basket.tickets.add(ticket)
+                return redirect('customer_interface:basket')
             else:
-                return render(request, 'customer_interface/create_ticket.html', {
-                    'ticket_form': ticket_form, 'order_id': order_id,
-                    'order_tickets': order_tickets
-                })
+                return render(request, 'customer_interface/basket.html',
+                              {'tickets': tickets, 'ticket_form': ticket_form})
+
+        if 'delete_ticket' in request.POST:
+            ticket_id = request.POST.get('ticket_id')
+            ticket_to_delete = Ticket.objects.get(id=ticket_id)
+            ticket_to_delete.delete()
+            return redirect('customer_interface:basket')
+
         if 'next' in request.POST:
-            return redirect('customer_interface:ticket_customization', order_id=order_id)
+            return redirect('customer_interface:create_order')
 
     ticket_form = TicketForm()
-    return render(request, 'customer_interface/create_ticket.html', {
-        'ticket_form': ticket_form, 'order_id': order_id,
-        'order_tickets': order_tickets
-    })
+
+    return render(request, 'customer_interface/basket.html',
+                  {'tickets': tickets, 'ticket_form': ticket_form})
 
 
+def delete_ticket(request, ticket_id):
+    ticket = get_object_or_404(Ticket, id=ticket_id)
+    ticket.delete()
+    return redirect('customer_interface:basket')
+
+
+@transaction.atomic
+def create_order(request):
+    user = request.user
+    basket = Basket.objects.get(user=user)
+    tickets = basket.tickets.all()
+
+    if request.method == "POST":
+        order_form = TicketSelectionForm(request.POST, tickets=tickets)
+        if order_form.is_valid():
+            order = Order.objects.create(user=user)
+            for ticket in tickets:
+                if order_form.cleaned_data.get(f'ticket_{ticket.id}'):
+                    ticket.order = order
+                    ticket.save()
+
+                    basket.tickets.remove(ticket)
+
+            return redirect('customer_interface:ticket_customization', order_id=order.id)
+        else:
+            messages.error(request, "You must select at least 1 ticket to place an order.")
+    else:
+        order_form = TicketSelectionForm(tickets=tickets)
+
+    return render(request, 'customer_interface/create_order.html', {'order_form': order_form, 'tickets': tickets})
+
+
+def handle_exception(view_func):
+    @wraps(view_func)
+    def _wrapped_view(request, *args, **kwargs):
+        try:
+            return view_func(request, *args, **kwargs)
+        except Exception as e:
+            response = process_exception(request, e)
+            if response:
+                return response
+            else:
+                raise
+    return _wrapped_view
+
+
+@handle_exception
 def ticket_customization(request, order_id):
     order = Order.objects.get(id=order_id)  # Receiving the order
     order_tickets = Ticket.objects.filter(order=order)  # We're getting all the tickets in this order
@@ -47,10 +103,10 @@ def ticket_customization(request, order_id):
                     seat_number = None
                 update_ticket_validator(ticket.seat_class, seat_number, ticket.flight, Ticket)  # Verifying the data
                 ticket.seat_number = seat_number
-                ticket.is_active = True  # Setting is_active to True to bypass deletion
+                ticket.status = 'checked_out'
                 ticket.save()
 
-        return redirect('index')
+        return redirect('customer_interface:basket')
 
     free_economy_seats = {}  # Plenty of available economy seats
     free_business_seats = {}  # Plenty of available business seats

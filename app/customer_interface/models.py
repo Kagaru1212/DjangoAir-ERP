@@ -58,6 +58,13 @@ class FlightFacilities(models.Model):
     objects = models.Manager()
 
 
+class Basket(models.Model):
+    user = models.OneToOneField(get_user_model(), on_delete=models.CASCADE)
+    tickets = models.ManyToManyField('Ticket', null=True)
+
+    objects = models.Manager()
+
+
 class Order(models.Model):
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     created_order = models.DateTimeField(auto_now_add=True)
@@ -66,12 +73,18 @@ class Order(models.Model):
 
 
 class Ticket(models.Model):
+    TYPE_CHOICES = (
+        ('booked', 'Booked'),
+        ('available', 'Available'),
+        ('checked_out', 'Checked out')
+    )
+
     flight = models.ForeignKey(Flight, on_delete=models.CASCADE)
-    order = models.ForeignKey(Order, on_delete=models.CASCADE)
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, null=True, default=None)
     # flight_facilities = models.ManyToManyField(FlightFacilities, through="TicketFacilities")
     seat_class = models.CharField(max_length=10, choices=[('economy', _('Economy')), ('business', _('Business'))])
     seat_number = models.PositiveIntegerField(blank=True, null=True, default=None)
-    is_active = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=TYPE_CHOICES, default='booked')
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = models.Manager()
@@ -85,15 +98,15 @@ class Ticket(models.Model):
 
 @receiver(post_save, sender=Ticket)
 def schedule_deletion(sender, instance, created, **kwargs):
-    from .tasks import delete_inactive
-    if not instance.is_active:
+    from .tasks import available_ticket
+    if instance.status == 'booked':
         # If the object is created for the first time and the created flag is True, schedule a deletion task.
         if created:
-            delete_inactive.apply_async(args=[instance.id], countdown=60)  # Schedule a task 60 seconds after saving.
+            available_ticket.apply_async(args=[instance.id], countdown=60)  # Schedule a task 60 seconds after saving.
         else:
             # If the object has been modified, check if more than 1 minute has passed since it was created.
             if timezone.now() - instance.created_at > timedelta(minutes=1):
-                delete_inactive.apply_async(args=[instance.id])
+                available_ticket.apply_async(args=[instance.id])
 
 
 class TicketFacilities(models.Model):

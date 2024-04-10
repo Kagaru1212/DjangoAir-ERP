@@ -6,11 +6,12 @@ from customer_interface.models import Ticket
 
 
 @shared_task
-def delete_inactive(instance_id):
+def available_ticket(instance_id):
     """Deleting a ticket if the time limit has expired."""
     try:
         obj = Ticket.objects.get(id=instance_id)
-        if not obj.is_active and timezone.now() - obj.created_at > timedelta(minutes=1):
-            obj.delete()
+        if obj.status == 'booked' and timezone.now() - obj.created_at > timedelta(minutes=1):
+            obj.status = 'available'
+            obj.save()
     except ObjectDoesNotExist:
         pass

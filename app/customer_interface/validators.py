@@ -3,7 +3,8 @@ from django.core.exceptions import ValidationError
 
 def create_ticket_validator(seat_class, seat_number, flight, Ticket):
     if seat_class == 'economy':
-        total_tickets = Ticket.objects.filter(flight=flight, seat_class=seat_class).count()
+        total_tickets = Ticket.objects.filter(flight=flight, seat_class=seat_class,
+                                              status__in=['booked', 'checked_out']).count()
         all_economy_seat = set(range(1, flight.available_economy_seats + 1))
         if total_tickets >= flight.available_economy_seats:
             raise ValidationError('This flight full')
@@ -22,7 +23,8 @@ def create_ticket_validator(seat_class, seat_number, flight, Ticket):
                 raise ValidationError('this seat is busy')
 
     if seat_class == 'business':
-        total_tickets = Ticket.objects.filter(flight=flight, seat_class=seat_class).count()
+        total_tickets = Ticket.objects.filter(flight=flight, seat_class=seat_class,
+                                              status__in=['booked', 'checked_out']).count()
         all_business_seat = set(range(1, flight.available_business_seats + 1))
         if total_tickets >= flight.available_business_seats:
             raise ValidationError('This flight full')
