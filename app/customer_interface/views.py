@@ -22,6 +22,24 @@ def basket_view(request):
             if ticket_form.is_valid():
                 ticket = ticket_form.save(commit=False)
                 create_ticket_validator(ticket.seat_class, ticket.seat_number, ticket.flight, Ticket)
+                if ticket.seat_class == 'economy':
+                    # Проверяем, есть ли уже доступные билеты на этот рейс
+                    available_tickets = Ticket.objects.filter(
+                        flight=ticket.flight,
+                        status='available',
+                        seat_class='economy'
+                    )
+                else:
+                    available_tickets = Ticket.objects.filter(
+                        flight=ticket.flight,
+                        status='available',
+                        seat_class='business')
+
+                if available_tickets.exists():
+                    # Если есть доступные билеты, удаляем один из них
+                    available_ticket = available_tickets.first()
+                    available_ticket.delete()
+
                 ticket.save()
                 basket.tickets.add(ticket)
                 return redirect('customer_interface:basket')
@@ -56,20 +74,21 @@ def create_order(request):
     basket = Basket.objects.get(user=user)
     tickets = basket.tickets.all()
 
-    if request.method == "POST":
+    if request.method == "POST" and 'create_order' in request.POST:
         order_form = TicketSelectionForm(request.POST, tickets=tickets)
         if order_form.is_valid():
-            order = Order.objects.create(user=user)
-            for ticket in tickets:
-                if order_form.cleaned_data.get(f'ticket_{ticket.id}'):
-                    ticket.order = order
-                    ticket.save()
+            if any(order_form.cleaned_data.get(f'ticket_{ticket.id}') for ticket in tickets):
+                order = Order.objects.create(user=user)
+                for ticket in tickets:
+                    if order_form.cleaned_data.get(f'ticket_{ticket.id}'):
+                        ticket.order = order
+                        ticket.save()
 
-                    basket.tickets.remove(ticket)
-
-            return redirect('customer_interface:ticket_customization', order_id=order.id)
-        else:
-            messages.error(request, "You must select at least 1 ticket to place an order.")
+                        basket.tickets.remove(ticket)
+                return redirect('customer_interface:ticket_customization', order_id=order.id)
+            else:
+                messages.error(request, "You must select at least 1 ticket to place an order.")
+                order_form = TicketSelectionForm(tickets=tickets)
     else:
         order_form = TicketSelectionForm(tickets=tickets)
 
@@ -93,7 +112,7 @@ def handle_exception(view_func):
 @handle_exception
 def ticket_customization(request, order_id):
     order = Order.objects.get(id=order_id)  # Receiving the order
-    order_tickets = Ticket.objects.filter(order=order)  # We're getting all the tickets in this order
+    order_tickets = order.tickets.all()  # Here I use related_name (tickets) to get all tickets associated with the order.
 
     if request.method == 'POST':
         with transaction.atomic():  # Creating a transaction

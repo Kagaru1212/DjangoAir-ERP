@@ -80,7 +80,7 @@ class Ticket(models.Model):
     )
 
     flight = models.ForeignKey(Flight, on_delete=models.CASCADE)
-    order = models.ForeignKey(Order, on_delete=models.CASCADE, null=True, default=None)
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, null=True, default=None, related_name='tickets')
     # flight_facilities = models.ManyToManyField(FlightFacilities, through="TicketFacilities")
     seat_class = models.CharField(max_length=10, choices=[('economy', _('Economy')), ('business', _('Business'))])
     seat_number = models.PositiveIntegerField(blank=True, null=True, default=None)
