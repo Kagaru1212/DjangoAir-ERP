@@ -13,7 +13,6 @@ from .validators import update_ticket_validator, create_ticket_validator
 def basket_view(request):
     user = request.user
     basket = Basket.objects.get(user=user)
-
     tickets = basket.tickets.all()
 
     if request.method == 'POST':
@@ -23,7 +22,7 @@ def basket_view(request):
                 ticket = ticket_form.save(commit=False)
                 create_ticket_validator(ticket.seat_class, ticket.seat_number, ticket.flight, Ticket)
                 if ticket.seat_class == 'economy':
-                    # Проверяем, есть ли уже доступные билеты на этот рейс
+                    # Check if there are already available tickets for this flight
                     available_tickets = Ticket.objects.filter(
                         flight=ticket.flight,
                         status='available',
@@ -36,8 +35,11 @@ def basket_view(request):
                         seat_class='business')
 
                 if available_tickets.exists():
-                    # Если есть доступные билеты, удаляем один из них
+                    # If there are available tickets, delete one of them
                     available_ticket = available_tickets.first()
+                    basket_overdue = Basket.objects.filter(tickets=available_ticket).first()
+                    basket_overdue.messages += f'\nDue to the fact that you did not buy the ticket within 30 minutes and it was bought by another user we have removed Flight: {available_ticket.flight} Seat: {available_ticket.seat_class} from your cart.'
+                    basket_overdue.save()
                     available_ticket.delete()
 
                 ticket.save()
@@ -56,10 +58,14 @@ def basket_view(request):
         if 'next' in request.POST:
             return redirect('customer_interface:create_order')
 
+    basket_messages = basket.messages.split("\n") if basket.messages else []
+    basket.messages = ""
+    basket.save()
+
     ticket_form = TicketForm()
 
     return render(request, 'customer_interface/basket.html',
-                  {'tickets': tickets, 'ticket_form': ticket_form})
+                  {'tickets': tickets, 'ticket_form': ticket_form, 'basket_messages': basket_messages})
 
 
 def delete_ticket(request, ticket_id):

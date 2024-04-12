@@ -61,6 +61,7 @@ class FlightFacilities(models.Model):
 class Basket(models.Model):
     user = models.OneToOneField(get_user_model(), on_delete=models.CASCADE)
     tickets = models.ManyToManyField('Ticket', null=True)
+    messages = models.TextField(blank=True)
 
     objects = models.Manager()
 
