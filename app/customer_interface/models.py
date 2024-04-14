@@ -19,10 +19,21 @@ class Airplane(models.Model):
 
 
 class Facilities(models.Model):
-    breakfast = models.BooleanField(default=True)
-    toilet = models.BooleanField(default=True)
+    TYPE_CHOICES = (
+        ('lunch', 'Lunch'),
+        ('luggage', 'Luggage'),
+    )
+    facilities_name = models.CharField(max_length=20, choices=TYPE_CHOICES)
 
     objects = models.Manager()
+
+    def __str__(self):
+        return f"{self.facilities_name}"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['facilities_name'], name='unique_facilities_name')
+        ]
 
 
 class Flight(models.Model):
@@ -50,12 +61,17 @@ class Flight(models.Model):
 class FlightFacilities(models.Model):
     facilities = models.ForeignKey(Facilities, on_delete=models.CASCADE)
     flight = models.ForeignKey(Flight, on_delete=models.CASCADE)
-    lunch = models.BooleanField(default=False)
-    lunch_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    luggage = models.BooleanField(default=False)
-    luggage_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     objects = models.Manager()
+
+    def __str__(self):
+        return f"Flight {self.flight} Facilities: {self.facilities.facilities_name}"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['facilities', 'flight'], name='unique_facilities_flight')
+        ]
 
 
 class Basket(models.Model):
@@ -113,4 +129,8 @@ def schedule_deletion(sender, instance, created, **kwargs):
 class TicketFacilities(models.Model):
     flight_facilities = models.ForeignKey(FlightFacilities, on_delete=models.CASCADE)
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE)
-    count = models.IntegerField()
+
+    objects = models.Manager()
+
+    def __str__(self):
+        return f"{self.flight_facilities}"

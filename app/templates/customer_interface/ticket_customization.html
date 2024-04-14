@@ -15,17 +15,27 @@
     <form method="post">
         {% csrf_token %}
 
-        {% for ticket in order_tickets %}
-            <h3>Ticket {{ forloop.counter }}</h3>
-            <p>Flight: {{ ticket.flight }}</p>
-            <p>Seat Class: {{ ticket.seat_class }}</p>
-            {% if ticket.seat_class == 'economy' %}
-                <p>Free Seats: {{ free_economy_seats }}</p>
-            {% elif ticket.seat_class == 'business' %}
-                <p>Free Seats: {{ free_business_seats }}</p>
-            {% endif %}
-            <label for="seat_number_{{ ticket.id }}">Seat Number:</label>
-            <input type="text" name="seat_number_{{ ticket.id }}" id="seat_number_{{ ticket.id }}" value="{{ ticket.seat_number|default_if_none:'' }}">
+        {% for info in ticket_info %}
+            {% with ticket=info.ticket facilities=info.facilities %}
+                <h3>Ticket {{ forloop.counter }}</h3>
+                <p>Flight: {{ ticket.flight }}</p>
+                <p>Seat Class: {{ ticket.seat_class }}</p>
+                {% if ticket.seat_class == 'economy' %}
+                    <p>Free Seats: {{ free_economy_seats }}</p>
+                {% elif ticket.seat_class == 'business' %}
+                    <p>Free Seats: {{ free_business_seats }}</p>
+                {% endif %}
+                {% for facility in facilities %}
+                    <p>{{  facility.facilities.facilities_name  }}
+                        <label for="facility_{{ ticket.id }}_{{ facility.id }}">
+                            <input type="checkbox" name="facilities_{{ ticket.id }}" id="facility_{{ ticket.id }}_{{ facility.id }}" value="{{ facility.id }}"
+                            {% if facility in ticket.facilities.all %} checked {% endif %}>
+                        </label><br>
+                    </p>
+                {% endfor %}
+                <label for="seat_number_{{ ticket.id }}">Seat Number:</label>
+                <input type="text" name="seat_number_{{ ticket.id }}" id="seat_number_{{ ticket.id }}" value="{{ ticket.seat_number|default_if_none:'' }}">
+            {% endwith %}
         {% endfor %}
 
         <button type="submit">Save</button>

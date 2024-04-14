@@ -6,7 +6,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 
 from .decorators import process_exception
 from .forms import TicketForm, TicketSelectionForm
-from .models import Ticket, Order, Basket
+from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities
 from .validators import update_ticket_validator, create_ticket_validator
 
 
@@ -123,6 +123,14 @@ def ticket_customization(request, order_id):
     if request.method == 'POST':
         with transaction.atomic():  # Creating a transaction
             for ticket in order_tickets:
+                facilities_ids = request.POST.getlist(f'facilities_{ticket.id}')
+                # Добавляем новые связи для выбранных удобств
+                for facility_id in facilities_ids:
+                    TicketFacilities.objects.create(
+                        ticket=ticket,
+                        flight_facilities=FlightFacilities.objects.get(id=facility_id),
+                    )
+
                 seat_number = request.POST.get(f'seat_number_{ticket.id}', None)  # Enter the seat number or leave it blank
                 if seat_number == '':
                     seat_number = None
@@ -132,6 +140,11 @@ def ticket_customization(request, order_id):
                 ticket.save()
 
         return redirect('customer_interface:basket')
+
+    ticket_info = []
+    for ticket in order_tickets:
+        flight_facilities = FlightFacilities.objects.filter(flight=ticket.flight)
+        ticket_info.append({'ticket': ticket, 'facilities': flight_facilities})
 
     free_economy_seats = {}  # Plenty of available economy seats
     free_business_seats = {}  # Plenty of available business seats
@@ -148,8 +161,8 @@ def ticket_customization(request, order_id):
             free_business_seats = all_economy_seat - all_busy_seats  # We get a lot of empty seats. To display on the page.
 
     return render(request, 'customer_interface/ticket_customization.html', {
-        'order_tickets': order_tickets,
         'order_id': order_id,
         'free_economy_seats': free_economy_seats,
         'free_business_seats': free_business_seats,
+        'ticket_info': ticket_info,
     })
