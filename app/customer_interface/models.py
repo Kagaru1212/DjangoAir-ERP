@@ -45,6 +45,10 @@ class Flight(models.Model):
     facilities = models.ManyToManyField(Facilities, through="FlightFacilities")
     available_economy_seats = models.IntegerField(editable=False, default=0)
     available_business_seats = models.IntegerField(editable=False, default=0)
+    price_economy_seats = models.IntegerField(default=0)
+    price_business_seats = models.IntegerField(default=0)
+    price_number_economy_seats = models.IntegerField(default=0)
+    price_number_business_seats = models.IntegerField(default=0)
 
     objects = models.Manager()
 
@@ -85,6 +89,7 @@ class Basket(models.Model):
 class Order(models.Model):
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     created_order = models.DateTimeField(auto_now_add=True)
+    price = models.IntegerField(blank=True, default=0)
 
     objects = models.Manager()
 
@@ -98,7 +103,7 @@ class Ticket(models.Model):
 
     flight = models.ForeignKey(Flight, on_delete=models.CASCADE)
     order = models.ForeignKey(Order, on_delete=models.CASCADE, null=True, default=None, related_name='tickets')
-    # flight_facilities = models.ManyToManyField(FlightFacilities, through="TicketFacilities")
+    flight_facilities = models.ManyToManyField(FlightFacilities, through="TicketFacilities")
     seat_class = models.CharField(max_length=10, choices=[('economy', _('Economy')), ('business', _('Business'))])
     seat_number = models.PositiveIntegerField(blank=True, null=True, default=None)
     status = models.CharField(max_length=20, choices=TYPE_CHOICES, default='booked')

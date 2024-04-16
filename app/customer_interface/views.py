@@ -131,15 +131,29 @@ def ticket_customization(request, order_id):
                         flight_facilities=FlightFacilities.objects.get(id=facility_id),
                     )
 
-                seat_number = request.POST.get(f'seat_number_{ticket.id}', None)  # Enter the seat number or leave it blank
+                seat_number = request.POST.get(f'seat_number_{ticket.id}', None)
                 if seat_number == '':
                     seat_number = None
-                update_ticket_validator(ticket.seat_class, seat_number, ticket.flight, Ticket)  # Verifying the data
+                update_ticket_validator(ticket.seat_class, seat_number, ticket.flight, Ticket)
                 ticket.seat_number = seat_number
-                ticket.status = 'checked_out'
                 ticket.save()
 
-        return redirect('customer_interface:basket')
+                if ticket.seat_class == 'economy':
+                    order.price += ticket.flight.price_economy_seats
+                    if ticket.seat_number:
+                        order.price += ticket.flight.price_number_economy_seats
+                else:
+                    order.price += ticket.flight.price_business_seats
+                    if ticket.seat_number:
+                        order.price += ticket.flight.price_number_business_seats
+
+                if ticket.flight_facilities.exists():
+                    for ticket_facility in ticket.ticketfacilities_set.all():
+                        order.price += ticket_facility.flight_facilities.price
+
+                order.save()
+
+        return redirect('customer_interface:buy_order', order_id=order_id)
 
     ticket_info = []
     for ticket in order_tickets:
@@ -165,4 +179,23 @@ def ticket_customization(request, order_id):
         'free_economy_seats': free_economy_seats,
         'free_business_seats': free_business_seats,
         'ticket_info': ticket_info,
+    })
+
+
+@transaction.atomic
+def buy_order(request, order_id):
+    order = Order.objects.get(id=order_id)
+    order_tickets = order.tickets.all()
+
+    if request.method == 'POST':
+        for ticket in order_tickets:
+            ticket.status = 'checked_out'
+            ticket.save()
+
+        # Перенаправляем на страницу корзины
+        return redirect('customer_interface:basket')
+
+    return render(request, 'customer_interface/buy_order.html', {
+        'order': order,
+        'order_tickets': order_tickets,
     })
