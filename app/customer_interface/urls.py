@@ -11,4 +11,5 @@ urlpatterns = [
     path('delete_ticket/<int:ticket_id>/', views.delete_ticket, name='delete_ticket'),
     path('ticket_customization/<int:order_id>/', views.ticket_customization, name='ticket_customization'),
     path('buy_order/<int:order_id>/', views.buy_order, name='buy_order'),
+    path('home/', views.IndexView.as_view(), name='home'),
 ]

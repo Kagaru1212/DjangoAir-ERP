@@ -3,11 +3,53 @@ from functools import wraps
 from django.contrib import messages
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
+from django.views import generic
 
 from .decorators import process_exception
-from .forms import TicketForm, TicketSelectionForm
-from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities
+from .forms import TicketForm, TicketSelectionForm, SearchFlightForm
+from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities, Flight
 from .validators import update_ticket_validator, create_ticket_validator
+
+
+class IndexView(generic.ListView):
+    model = Flight
+    template_name = "index.html"
+
+    def get_context_data(self, *, object_list=None, **kwargs):
+        context = super().get_context_data()
+        place_of_departure = self.request.GET.get("place_of_departure", "")
+        place_of_arrival = self.request.GET.get("place_of_arrival", "")
+        context["place_of_departure"] = place_of_departure
+        context["place_of_arrival"] = place_of_arrival
+        context['search_form'] = SearchFlightForm(
+            initial={
+                "place_of_departure": place_of_departure,
+                "place_of_arrival": place_of_arrival,
+            }
+        )
+        return context
+
+    def get_queryset(self):
+        place_of_departure = self.request.GET.get("place_of_departure")
+        place_of_arrival = self.request.GET.get("place_of_arrival")
+
+        queryset = super().get_queryset()
+
+        if place_of_departure and place_of_arrival:
+            queryset = queryset.filter(
+                place_of_departure__icontains=place_of_departure,
+                place_of_arrival__icontains=place_of_arrival,
+            )
+        if place_of_departure:
+            queryset = queryset.filter(
+                place_of_departure__icontains=place_of_departure,
+            )
+        if place_of_arrival:
+            queryset = queryset.filter(
+                place_of_arrival__icontains=place_of_arrival,
+            )
+
+        return queryset
 
 
 def basket_view(request):
