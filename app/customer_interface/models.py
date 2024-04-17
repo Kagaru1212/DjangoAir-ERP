@@ -19,10 +19,21 @@ class Airplane(models.Model):
 
 
 class Facilities(models.Model):
-    breakfast = models.BooleanField(default=True)
-    toilet = models.BooleanField(default=True)
+    TYPE_CHOICES = (
+        ('lunch', 'Lunch'),
+        ('luggage', 'Luggage'),
+    )
+    facilities_name = models.CharField(max_length=20, choices=TYPE_CHOICES)
 
     objects = models.Manager()
+
+    def __str__(self):
+        return f"{self.facilities_name}"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['facilities_name'], name='unique_facilities_name')
+        ]
 
 
 class Flight(models.Model):
@@ -34,6 +45,10 @@ class Flight(models.Model):
     facilities = models.ManyToManyField(Facilities, through="FlightFacilities")
     available_economy_seats = models.IntegerField(editable=False, default=0)
     available_business_seats = models.IntegerField(editable=False, default=0)
+    price_economy_seats = models.IntegerField(default=0)
+    price_business_seats = models.IntegerField(default=0)
+    price_number_economy_seats = models.IntegerField(default=0)
+    price_number_business_seats = models.IntegerField(default=0)
 
     objects = models.Manager()
 
@@ -50,10 +65,23 @@ class Flight(models.Model):
 class FlightFacilities(models.Model):
     facilities = models.ForeignKey(Facilities, on_delete=models.CASCADE)
     flight = models.ForeignKey(Flight, on_delete=models.CASCADE)
-    lunch = models.BooleanField(default=False)
-    lunch_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    luggage = models.BooleanField(default=False)
-    luggage_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    objects = models.Manager()
+
+    def __str__(self):
+        return f"Flight {self.flight} Facilities: {self.facilities.facilities_name}"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['facilities', 'flight'], name='unique_facilities_flight')
+        ]
+
+
+class Basket(models.Model):
+    user = models.OneToOneField(get_user_model(), on_delete=models.CASCADE)
+    tickets = models.ManyToManyField('Ticket', null=True)
+    messages = models.TextField(blank=True)
 
     objects = models.Manager()
 
@@ -61,17 +89,24 @@ class FlightFacilities(models.Model):
 class Order(models.Model):
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     created_order = models.DateTimeField(auto_now_add=True)
+    price = models.IntegerField(blank=True, default=0)
 
     objects = models.Manager()
 
 
 class Ticket(models.Model):
+    TYPE_CHOICES = (
+        ('booked', 'Booked'),
+        ('available', 'Available'),
+        ('checked_out', 'Checked out')
+    )
+
     flight = models.ForeignKey(Flight, on_delete=models.CASCADE)
-    order = models.ForeignKey(Order, on_delete=models.CASCADE)
-    # flight_facilities = models.ManyToManyField(FlightFacilities, through="TicketFacilities")
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, null=True, default=None, related_name='tickets')
+    flight_facilities = models.ManyToManyField(FlightFacilities, through="TicketFacilities")
     seat_class = models.CharField(max_length=10, choices=[('economy', _('Economy')), ('business', _('Business'))])
     seat_number = models.PositiveIntegerField(blank=True, null=True, default=None)
-    is_active = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=TYPE_CHOICES, default='booked')
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = models.Manager()
@@ -85,18 +120,22 @@ class Ticket(models.Model):
 
 @receiver(post_save, sender=Ticket)
 def schedule_deletion(sender, instance, created, **kwargs):
-    from .tasks import delete_inactive
-    if not instance.is_active:
+    from .tasks import available_ticket
+    if instance.status == 'booked':
         # If the object is created for the first time and the created flag is True, schedule a deletion task.
         if created:
-            delete_inactive.apply_async(args=[instance.id], countdown=60)  # Schedule a task 60 seconds after saving.
+            available_ticket.apply_async(args=[instance.id], countdown=60)  # Schedule a task 60 seconds after saving.
         else:
             # If the object has been modified, check if more than 1 minute has passed since it was created.
             if timezone.now() - instance.created_at > timedelta(minutes=1):
-                delete_inactive.apply_async(args=[instance.id])
+                available_ticket.apply_async(args=[instance.id])
 
 
 class TicketFacilities(models.Model):
     flight_facilities = models.ForeignKey(FlightFacilities, on_delete=models.CASCADE)
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE)
-    count = models.IntegerField()
+
+    objects = models.Manager()
+
+    def __str__(self):
+        return f"{self.flight_facilities}"

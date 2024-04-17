@@ -1,56 +1,164 @@
+from functools import wraps
+
+from django.contrib import messages
 from django.db import transaction
-from django.shortcuts import render, redirect
-from .forms import TicketForm
-from .models import Ticket, Order
-from .validators import update_ticket_validator
+from django.shortcuts import render, redirect, get_object_or_404
+
+from .decorators import process_exception
+from .forms import TicketForm, TicketSelectionForm
+from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities
+from .validators import update_ticket_validator, create_ticket_validator
 
 
-def create_ticket(request, order_id=None):
-    if not order_id:
-        order_id = request.POST.get('order_id')
-
-    order = Order.objects.get(id=order_id)
-    order_tickets = Ticket.objects.filter(order=order)
+def basket_view(request):
+    user = request.user
+    basket = Basket.objects.get(user=user)
+    tickets = basket.tickets.all()
 
     if request.method == 'POST':
         if 'add_ticket' in request.POST:
             ticket_form = TicketForm(request.POST)
-            if ticket_form.is_valid():  # ticket creation
+            if ticket_form.is_valid():
                 ticket = ticket_form.save(commit=False)
-                ticket.order = order
+                create_ticket_validator(ticket.seat_class, ticket.seat_number, ticket.flight, Ticket)
+                if ticket.seat_class == 'economy':
+                    # Check if there are already available tickets for this flight
+                    available_tickets = Ticket.objects.filter(
+                        flight=ticket.flight,
+                        status='available',
+                        seat_class='economy'
+                    )
+                else:
+                    available_tickets = Ticket.objects.filter(
+                        flight=ticket.flight,
+                        status='available',
+                        seat_class='business')
+
+                if available_tickets.exists():
+                    # If there are available tickets, delete one of them
+                    available_ticket = available_tickets.first()
+                    basket_overdue = Basket.objects.filter(tickets=available_ticket).first()
+                    basket_overdue.messages += f'\nDue to the fact that you did not buy the ticket within 30 minutes and it was bought by another user we have removed Flight: {available_ticket.flight} Seat: {available_ticket.seat_class} from your cart.'
+                    basket_overdue.save()
+                    available_ticket.delete()
+
                 ticket.save()
-                return redirect('customer_interface:create_ticket_with_order_id', order_id=order_id)
+                basket.tickets.add(ticket)
+                return redirect('customer_interface:basket')
             else:
-                return render(request, 'customer_interface/create_ticket.html', {
-                    'ticket_form': ticket_form, 'order_id': order_id,
-                    'order_tickets': order_tickets
-                })
+                return render(request, 'customer_interface/basket.html',
+                              {'tickets': tickets, 'ticket_form': ticket_form})
+
+        if 'delete_ticket' in request.POST:
+            ticket_id = request.POST.get('ticket_id')
+            ticket_to_delete = Ticket.objects.get(id=ticket_id)
+            ticket_to_delete.delete()
+            return redirect('customer_interface:basket')
+
         if 'next' in request.POST:
-            return redirect('customer_interface:ticket_customization', order_id=order_id)
+            return redirect('customer_interface:create_order')
+
+    basket_messages = basket.messages.split("\n") if basket.messages else []
+    basket.messages = ""
+    basket.save()
 
     ticket_form = TicketForm()
-    return render(request, 'customer_interface/create_ticket.html', {
-        'ticket_form': ticket_form, 'order_id': order_id,
-        'order_tickets': order_tickets
-    })
+
+    return render(request, 'customer_interface/basket.html',
+                  {'tickets': tickets, 'ticket_form': ticket_form, 'basket_messages': basket_messages})
 
 
+def delete_ticket(request, ticket_id):
+    ticket = get_object_or_404(Ticket, id=ticket_id)
+    ticket.delete()
+    return redirect('customer_interface:basket')
+
+
+@transaction.atomic
+def create_order(request):
+    user = request.user
+    basket = Basket.objects.get(user=user)
+    tickets = basket.tickets.all()
+
+    if request.method == "POST" and 'create_order' in request.POST:
+        order_form = TicketSelectionForm(request.POST, tickets=tickets)
+        if order_form.is_valid():
+            if any(order_form.cleaned_data.get(f'ticket_{ticket.id}') for ticket in tickets):
+                order = Order.objects.create(user=user)
+                for ticket in tickets:
+                    if order_form.cleaned_data.get(f'ticket_{ticket.id}'):
+                        ticket.order = order
+                        ticket.save()
+
+                        basket.tickets.remove(ticket)
+                return redirect('customer_interface:ticket_customization', order_id=order.id)
+            else:
+                messages.error(request, "You must select at least 1 ticket to place an order.")
+                order_form = TicketSelectionForm(tickets=tickets)
+    else:
+        order_form = TicketSelectionForm(tickets=tickets)
+
+    return render(request, 'customer_interface/create_order.html', {'order_form': order_form, 'tickets': tickets})
+
+
+def handle_exception(view_func):
+    @wraps(view_func)
+    def _wrapped_view(request, *args, **kwargs):
+        try:
+            return view_func(request, *args, **kwargs)
+        except Exception as e:
+            response = process_exception(request, e)
+            if response:
+                return response
+            else:
+                raise
+    return _wrapped_view
+
+
+@handle_exception
 def ticket_customization(request, order_id):
     order = Order.objects.get(id=order_id)  # Receiving the order
-    order_tickets = Ticket.objects.filter(order=order)  # We're getting all the tickets in this order
+    order_tickets = order.tickets.all()  # Here I use related_name (tickets) to get all tickets associated with the order.
 
     if request.method == 'POST':
         with transaction.atomic():  # Creating a transaction
             for ticket in order_tickets:
-                seat_number = request.POST.get(f'seat_number_{ticket.id}', None)  # Enter the seat number or leave it blank
+                facilities_ids = request.POST.getlist(f'facilities_{ticket.id}')
+                # Добавляем новые связи для выбранных удобств
+                for facility_id in facilities_ids:
+                    TicketFacilities.objects.create(
+                        ticket=ticket,
+                        flight_facilities=FlightFacilities.objects.get(id=facility_id),
+                    )
+
+                seat_number = request.POST.get(f'seat_number_{ticket.id}', None)
                 if seat_number == '':
                     seat_number = None
-                update_ticket_validator(ticket.seat_class, seat_number, ticket.flight, Ticket)  # Verifying the data
+                update_ticket_validator(ticket.seat_class, seat_number, ticket.flight, Ticket)
                 ticket.seat_number = seat_number
-                ticket.is_active = True  # Setting is_active to True to bypass deletion
                 ticket.save()
 
-        return redirect('index')
+                if ticket.seat_class == 'economy':
+                    order.price += ticket.flight.price_economy_seats
+                    if ticket.seat_number:
+                        order.price += ticket.flight.price_number_economy_seats
+                else:
+                    order.price += ticket.flight.price_business_seats
+                    if ticket.seat_number:
+                        order.price += ticket.flight.price_number_business_seats
+
+                if ticket.flight_facilities.exists():
+                    for ticket_facility in ticket.ticketfacilities_set.all():
+                        order.price += ticket_facility.flight_facilities.price
+
+                order.save()
+
+        return redirect('customer_interface:buy_order', order_id=order_id)
+
+    ticket_info = []
+    for ticket in order_tickets:
+        flight_facilities = FlightFacilities.objects.filter(flight=ticket.flight)
+        ticket_info.append({'ticket': ticket, 'facilities': flight_facilities})
 
     free_economy_seats = {}  # Plenty of available economy seats
     free_business_seats = {}  # Plenty of available business seats
@@ -67,8 +175,27 @@ def ticket_customization(request, order_id):
             free_business_seats = all_economy_seat - all_busy_seats  # We get a lot of empty seats. To display on the page.
 
     return render(request, 'customer_interface/ticket_customization.html', {
-        'order_tickets': order_tickets,
         'order_id': order_id,
         'free_economy_seats': free_economy_seats,
         'free_business_seats': free_business_seats,
+        'ticket_info': ticket_info,
+    })
+
+
+@transaction.atomic
+def buy_order(request, order_id):
+    order = Order.objects.get(id=order_id)
+    order_tickets = order.tickets.all()
+
+    if request.method == 'POST':
+        for ticket in order_tickets:
+            ticket.status = 'checked_out'
+            ticket.save()
+
+        # Перенаправляем на страницу корзины
+        return redirect('customer_interface:basket')
+
+    return render(request, 'customer_interface/buy_order.html', {
+        'order': order,
+        'order_tickets': order_tickets,
     })

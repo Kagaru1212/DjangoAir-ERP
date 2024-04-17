@@ -43,7 +43,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'users.apps.UsersConfig',
-    'my_test_app.apps.MyTestAppConfig',
     'customer_interface.apps.CustomerInterfaceConfig',
     'social_django',
     'debug_toolbar',
@@ -62,7 +61,6 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'social_django.middleware.SocialAuthExceptionMiddleware',
     'debug_toolbar.middleware.DebugToolbarMiddleware',
-    'customer_interface.middleware.NotValidTicket',
 ]
 
 AUTH_USER_MODEL = 'users.CustomUser'

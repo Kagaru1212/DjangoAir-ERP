@@ -11,6 +11,7 @@ admin.site.register(TicketFacilities)
 
 class FlightFacilitiesInline(admin.TabularInline):
     model = FlightFacilities
+    extra = 2
 
 
 class FlightAdmin(admin.ModelAdmin):
@@ -22,6 +23,7 @@ admin.site.register(Flight, FlightAdmin)
 
 class TicketFacilitiesInline(admin.TabularInline):
     model = TicketFacilities
+    extra = 1
 
 
 class TicketAdmin(admin.ModelAdmin):
