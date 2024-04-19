@@ -9,6 +9,7 @@ from django.views import generic
 from .decorators import process_exception
 from .forms import TicketForm, TicketSelectionForm, SearchFlightForm
 from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities, Flight
+from .tasks import send_tickets
 from .utils.ticket_seats import free_seats
 from .validators import update_ticket_validator, create_ticket_validator
 
@@ -248,7 +249,7 @@ def ticket_customization(request, order_id):
         with transaction.atomic():  # Creating a transaction
             for ticket in order_tickets:
                 facilities_ids = request.POST.getlist(f'facilities_{ticket.id}')
-                # Добавляем новые связи для выбранных удобств
+                # Add new links for the selected amenities
                 for facility_id in facilities_ids:
                     TicketFacilities.objects.create(
                         ticket=ticket,
@@ -283,10 +284,10 @@ def ticket_customization(request, order_id):
 
         return redirect('customer_interface:buy_order', order_id=order_id)
 
-    # Извлекаем уникальные рейсы из списка билетов
+    # Extract unique flights from the ticket list
     unique_flights = set(ticket.flight for ticket in order_tickets)
 
-    # Получаем свободные места для каждого рейса
+    # We get the available seats for each flight
     free_economy_seats = {}
     free_business_seats = {}
     for flight in unique_flights:
@@ -316,7 +317,9 @@ def buy_order(request, order_id):
             ticket.status = 'checked_out'
             ticket.save()
 
-        # Перенаправляем на страницу корзины
+            send_tickets.apply_async(args=[ticket.id, ticket.order.user.email])
+
+        # Redirect to the Basket page
         return redirect('customer_interface:basket')
 
     return render(request, 'customer_interface/buy_order.html', {
