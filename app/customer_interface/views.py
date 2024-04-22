@@ -1,13 +1,137 @@
 from functools import wraps
 
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
+from django.views import generic
 
 from .decorators import process_exception
-from .forms import TicketForm, TicketSelectionForm
-from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities
+from .forms import TicketForm, TicketSelectionForm, SearchFlightForm
+from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities, Flight
+from .utils.ticket_seats import free_seats
 from .validators import update_ticket_validator, create_ticket_validator
+
+
+class IndexView(generic.ListView):
+    model = Flight
+    template_name = "base_user_interface.html"
+
+    def get_context_data(self, *, object_list=None, **kwargs):
+        context = super().get_context_data()
+        place_of_departure = self.request.GET.get("place_of_departure", "")
+        place_of_arrival = self.request.GET.get("place_of_arrival", "")
+        context["place_of_departure"] = place_of_departure
+        context["place_of_arrival"] = place_of_arrival
+        context['search_form'] = SearchFlightForm(
+            initial={
+                "place_of_departure": place_of_departure,
+                "place_of_arrival": place_of_arrival,
+            }
+        )
+        return context
+
+    def get_queryset(self):
+        place_of_departure = self.request.GET.get("place_of_departure")
+        place_of_arrival = self.request.GET.get("place_of_arrival")
+
+        queryset = super().get_queryset()
+
+        if place_of_departure and place_of_arrival:
+            queryset = queryset.filter(
+                place_of_departure__icontains=place_of_departure,
+                place_of_arrival__icontains=place_of_arrival,
+            )
+        if place_of_departure:
+            queryset = queryset.filter(
+                place_of_departure__icontains=place_of_departure,
+            )
+        if place_of_arrival:
+            queryset = queryset.filter(
+                place_of_arrival__icontains=place_of_arrival,
+            )
+
+        return queryset
+
+
+class FlightDetailView(generic.DetailView):
+    model = Flight
+    template_name = 'customer_interface/flight_detail.html'
+
+    def post(self, request, *args, **kwargs):
+        flight = self.get_object()
+        user = request.user
+        basket = Basket.objects.get(user=user)
+
+        if request.method == "POST" and 'add_economy' in request.POST:
+            seat_class = 'economy'
+        else:
+            seat_class = 'business'
+
+        ticket = Ticket(flight=flight, seat_class=seat_class)
+        try:
+            create_ticket_validator(ticket.seat_class, ticket.seat_number, ticket.flight, Ticket)
+            available_tickets = Ticket.objects.filter(
+                flight=ticket.flight,
+                status='available',
+                seat_class=seat_class
+            )
+
+            if available_tickets.exists():
+                available_ticket = available_tickets.first()
+                basket_overdue = Basket.objects.filter(tickets=available_ticket).first()
+                basket_overdue.messages += f'\nDue to the fact that you did not buy the ticket within 30 minutes and it was bought by another user we have removed Flight: {available_ticket.flight} Seat: {available_ticket.seat_class} from your cart.'
+                basket_overdue.save()
+                available_ticket.delete()
+
+            ticket.save()
+            basket.tickets.add(ticket)
+
+        except ValidationError as e:
+            error_message = str(e)
+            available_economy_seats = flight.available_economy_seats
+            available_business_seats = flight.available_business_seats
+            total_economy_tickets = Ticket.objects.filter(flight=flight, seat_class='economy',
+                                                          status__in=['booked', 'checked_out']).count()
+            total_business_tickets = Ticket.objects.filter(flight=flight, seat_class='business',
+                                                           status__in=['booked', 'checked_out']).count()
+            available_economy_seats -= total_economy_tickets
+            available_business_seats -= total_business_tickets
+
+            free_economy_seats = free_seats(flight, seat_class='economy')
+            free_business_seats = free_seats(flight, seat_class='business')  # This function returns the set of free spaces in the class
+
+            return render(request, self.template_name, {
+                'flight': flight,
+                'error_message': error_message,
+                'available_economy_seats': available_economy_seats,
+                'available_business_seats': available_business_seats,
+                'free_economy_seats': free_economy_seats,
+                'free_business_seats': free_business_seats
+            })
+
+        return redirect('customer_interface:flight_detail', pk=flight.pk)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        flight = self.get_object()
+        available_economy_seats = flight.available_economy_seats
+        available_business_seats = flight.available_business_seats
+        total_economy_tickets = Ticket.objects.filter(flight=flight, seat_class='economy',
+                                                      status__in=['booked', 'checked_out']).count()
+        total_business_tickets = Ticket.objects.filter(flight=flight, seat_class='business',
+                                                       status__in=['booked', 'checked_out']).count()
+        available_economy_seats -= total_economy_tickets
+        available_business_seats -= total_business_tickets
+
+        free_economy_seats = free_seats(flight, seat_class='economy')
+        free_business_seats = free_seats(flight, seat_class='business')  # This function returns the set of free spaces in the class
+
+        context['free_economy_seats'] = free_economy_seats
+        context['free_business_seats'] = free_business_seats
+        context['available_economy_seats'] = available_economy_seats
+        context['available_business_seats'] = available_business_seats
+        return context
 
 
 def basket_view(request):
@@ -136,6 +260,10 @@ def ticket_customization(request, order_id):
                     seat_number = None
                 update_ticket_validator(ticket.seat_class, seat_number, ticket.flight, Ticket)
                 ticket.seat_number = seat_number
+                first_name = request.POST.get(f'first_name_{ticket.id}')
+                last_name = request.POST.get(f'last_name_{ticket.id}')
+                ticket.first_name = first_name
+                ticket.last_name = last_name
                 ticket.save()
 
                 if ticket.seat_class == 'economy':
@@ -155,24 +283,20 @@ def ticket_customization(request, order_id):
 
         return redirect('customer_interface:buy_order', order_id=order_id)
 
+    # Извлекаем уникальные рейсы из списка билетов
+    unique_flights = set(ticket.flight for ticket in order_tickets)
+
+    # Получаем свободные места для каждого рейса
+    free_economy_seats = {}
+    free_business_seats = {}
+    for flight in unique_flights:
+        free_economy_seats = free_seats(flight, seat_class='economy')
+        free_business_seats = free_seats(flight, seat_class='business')
+
     ticket_info = []
     for ticket in order_tickets:
         flight_facilities = FlightFacilities.objects.filter(flight=ticket.flight)
         ticket_info.append({'ticket': ticket, 'facilities': flight_facilities})
-
-    free_economy_seats = {}  # Plenty of available economy seats
-    free_business_seats = {}  # Plenty of available business seats
-    for ticket in order_tickets:
-        if ticket.seat_class == 'economy':
-            all_economy_seat = set(range(1, ticket.flight.available_economy_seats + 1))  # Creating a variety of accessible locations
-            busy_tickets = Ticket.objects.filter(flight=ticket.flight, seat_class=ticket.seat_class)  # Getting tickets for this flight
-            all_busy_seats = set(ticket.seat_number for ticket in busy_tickets)  # We obtain the set of all occupied seats
-            free_economy_seats = all_economy_seat - all_busy_seats  # We get a lot of empty seats. To display on the page.
-        if ticket.seat_class == 'business':
-            all_economy_seat = set(range(1, ticket.flight.available_business_seats + 1))  # Creating a variety of accessible locations
-            busy_tickets = Ticket.objects.filter(flight=ticket.flight, seat_class=ticket.seat_class)  # Getting tickets for this flight
-            all_busy_seats = set(ticket.seat_number for ticket in busy_tickets)  # We obtain the set of all occupied seats
-            free_business_seats = all_economy_seat - all_busy_seats  # We get a lot of empty seats. To display on the page.
 
     return render(request, 'customer_interface/ticket_customization.html', {
         'order_id': order_id,

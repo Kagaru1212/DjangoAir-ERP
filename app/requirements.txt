@@ -12,3 +12,5 @@ django-celery-beat==2.5.0
 django-celery-results==2.5.1
 django-redis==5.4.0
 redis==5.0.1
+crispy-bootstrap5==2024.2
+django-crispy-forms==2.1

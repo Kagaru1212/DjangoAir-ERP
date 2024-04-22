@@ -1,4 +1,5 @@
 {% extends "base_user_interface.html" %}
+{% load crispy_forms_filters %}
 
 {% block content %}
 <body>
@@ -17,9 +18,9 @@
 
     <form method="post" action="{% url 'customer_interface:basket' %}" novalidate>
         {% csrf_token %}
-        {{ ticket_form.as_p }}
-        <button type="submit" name="next">Next</button>
-        <button type="submit" name="add_ticket">Add Ticket</button>
+        {{ ticket_form|crispy }}
+        <button type="submit" class="btn btn-secondary" name="next">Next</button>
+        <button type="submit" class="btn btn-secondary" name="add_ticket">Add Ticket</button>
     </form>
 
     <h2>Potential purchases:</h2>
@@ -30,7 +31,7 @@
             <p>Seat Class: {{ ticket.seat_class }}</p>
             <form method="post" action="{% url 'customer_interface:delete_ticket' ticket.id %}">
                 {% csrf_token %}
-                <button type="submit">Delete</button>
+                <button class="btn btn-danger" type="submit">Delete</button>
             </form>
         {% endfor %}
     </ul>

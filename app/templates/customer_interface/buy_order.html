@@ -22,8 +22,10 @@
                         {% endfor %}
                     </ul>
                 {% endif %}
+                <p>First name: {{ ticket.first_name }}</p>
+                <p>Last name: {{ ticket.last_name }}</p>
             {% endfor %}
         </ul>
-        <button type="submit">Buy order</button>
+        <button class="btn btn-success" type="submit">Buy order</button>
     </form>
 {% endblock %}

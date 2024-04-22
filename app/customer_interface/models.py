@@ -107,6 +107,8 @@ class Ticket(models.Model):
     seat_class = models.CharField(max_length=10, choices=[('economy', _('Economy')), ('business', _('Business'))])
     seat_number = models.PositiveIntegerField(blank=True, null=True, default=None)
     status = models.CharField(max_length=20, choices=TYPE_CHOICES, default='booked')
+    first_name = models.CharField(max_length=100, null=True, default=None)
+    last_name = models.CharField(max_length=100, null=True, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = models.Manager()

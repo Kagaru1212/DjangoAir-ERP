@@ -49,6 +49,8 @@ INSTALLED_APPS = [
     'django_celery_results',
     'django_celery_beat',
     'celery',
+    "crispy_forms",
+    "crispy_bootstrap5",
 ]
 
 MIDDLEWARE = [
@@ -216,3 +218,7 @@ LOGGING = {
         'level': 'INFO',
     },
 }
+
+CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
+
+CRISPY_TEMPLATE_PACK = "bootstrap5"
