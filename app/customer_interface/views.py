@@ -379,8 +379,6 @@ def ticket_detail(request, ticket_id):
                     ticket.seat_number = seat_number
 
                 ticket.save()
-
-                send_tickets.apply_async(args=[ticket.id, user.email])
         except ValidationError as e:
             error_message = str(e)
 
@@ -396,6 +394,8 @@ def ticket_detail(request, ticket_id):
                 'free_business_seats': free_business_seats,
                 'error_message': error_message,
             })
+
+        send_tickets.apply_async(args=[ticket.id, user.email])
 
         return redirect('customer_interface:ticket_input')
 
