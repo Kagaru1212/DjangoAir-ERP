@@ -110,6 +110,9 @@ class Ticket(models.Model):
     first_name = models.CharField(max_length=100, null=True, default=None)
     last_name = models.CharField(max_length=100, null=True, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
+    check_in_manager = models.ForeignKey(get_user_model(), on_delete=models.CASCADE,
+                                         null=True, default=None, related_name='check_tickets')
+    time_check = models.DateTimeField(null=True, default=None)
 
     objects = models.Manager()
 

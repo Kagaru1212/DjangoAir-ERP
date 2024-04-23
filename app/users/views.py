@@ -16,13 +16,13 @@ from users.utils.token_generators import TokenGenerator
 
 class UserLoginView(LoginView):
     def get_default_redirect_url(self):
-        return reverse("index")
+        return reverse("customer_interface:home")
 
 
 class UserRegistrationView(CreateView):
     template_name = "registration/registration.html"
     form_class = UserRegistrationForm
-    success_url = reverse_lazy("index")
+    success_url = reverse_lazy("customer_interface:home")
 
     def form_valid(self, form):
         self.object = form.save(commit=False)
@@ -37,7 +37,7 @@ class UserRegistrationView(CreateView):
 
 
 class ActivateUserView(RedirectView):
-    url = reverse_lazy('index')
+    url = reverse_lazy('customer_interface:home')
 
     def get(self, request, uuid64, token, *args, **kwargs):
         try:

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ticket</title>
+</head>
+    {% if error_message %}
+        <div class="alert alert-danger" role="alert">
+          {{ error_message }}
+        </div>
+    {% endif %}
+
+    {% if ticket %}
+    <p>{{ ticket.flight }}</p>
+    <p>{{ ticket.order }}</p>
+    <p>{{ ticket.seat_class }}</p>
+    <p>{{ ticket.status }}</p>
+    <p>{{ ticket.first_name }}</p>
+    <p>{{ ticket.last_name }}</p>
+    <p>{{ ticket.created_at }}</p>
+    <form method="post">
+        {% csrf_token %}
+        {% if ticket.seat_number %}
+        <p>Seat Number: {{ ticket.seat_number }}</p>
+        {% else %}
+            {% if ticket.seat_class == 'economy' %}
+                <p>Free seats price: {{ ticket.flight.price_number_economy_seats }}</p>
+                <p>Free seats: {{ free_economy_seats }}</p>
+            {% elif ticket.seat_class == 'business' %}
+                <p>Free seats price: {{ ticket.flight.price_number_business_seats }}</p>
+                <p>Free seats: {{ free_business_seats }}</p>
+            {% endif %}
+        <label for="seat_number_new">Seat Number:</label>
+        <input type="number" id="seat_number_new" name="seat_number">
+        {% endif %}
+        {% for facility in flight_facilities %}
+            <p>{{ facility.facilities.facilities_name }}
+                <label for="facility_{{ ticket.id }}_{{ facility.facilities.id }}">
+                    <input type="checkbox" name="facilities_{{ ticket.id }}" id="facility_{{ ticket.id }}_{{ facility.facilities.id }}" value="{{ facility.facilities.id }}"
+                           {% if facility.facilities.id in ticket_facility_ids %} checked {% endif %}>
+                </label> Price: {{ facility.price }}<br>
+            </p>
+        {% endfor %}
+        <button type="submit">Save</button>
+    </form>
+    {% endif %}
+</html>
