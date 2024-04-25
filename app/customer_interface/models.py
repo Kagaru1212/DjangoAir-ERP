@@ -94,6 +94,14 @@ class Order(models.Model):
     objects = models.Manager()
 
 
+class FacilitiesOrder(models.Model):
+    ticket = models.ForeignKey('Ticket', on_delete=models.CASCADE)
+    created_order = models.DateTimeField(auto_now_add=True)
+    price = models.IntegerField(blank=True, default=0)
+
+    objects = models.Manager()
+
+
 class Ticket(models.Model):
     TYPE_CHOICES = (
         ('booked', 'Booked'),
@@ -113,6 +121,9 @@ class Ticket(models.Model):
     check_in_manager = models.ForeignKey(get_user_model(), on_delete=models.CASCADE,
                                          null=True, default=None, related_name='check_tickets')
     time_check = models.DateTimeField(null=True, default=None)
+    gate_manager = models.ForeignKey(get_user_model(), on_delete=models.CASCADE,
+                                     null=True, default=None, related_name='check_gate_tickets')
+    time_gate = models.DateTimeField(null=True, default=None)
 
     objects = models.Manager()
 

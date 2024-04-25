@@ -12,7 +12,7 @@ from django.views import generic
 
 from .decorators import process_exception
 from .forms import TicketForm, TicketSelectionForm, SearchFlightForm
-from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities, Flight
+from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities, Flight, FacilitiesOrder
 from .tasks import send_tickets
 from .utils.ticket_seats import free_seats
 from .validators import update_ticket_validator, create_ticket_validator
@@ -355,6 +355,7 @@ def ticket_detail(request, ticket_id):
     user = request.user
     ticket = Ticket.objects.get(id=ticket_id)
     flight = ticket.flight
+    facilities_price = 0
 
     if request.method == 'POST':
         ticket.check_in_manager = user
@@ -362,21 +363,23 @@ def ticket_detail(request, ticket_id):
 
         try:
             with transaction.atomic():
-                # Удаляем все текущие связи с удобствами для данного билета
-                ticket.flight_facilities.clear()
-
                 facilities_ids = request.POST.getlist(f'facilities_{ticket.id}')
                 # Добавляем новые связи только для выбранных удобств
                 for facility_id in facilities_ids:
-                    TicketFacilities.objects.create(
+                    facilities = TicketFacilities.objects.create(
                         ticket=ticket,
                         flight_facilities=FlightFacilities.objects.get(id=facility_id),
                     )
+                    facilities_price += facilities.flight_facilities.price
 
                 seat_number = request.POST.get('seat_number')
                 if seat_number:
                     update_ticket_validator(ticket.seat_class, seat_number, ticket.flight, Ticket)
                     ticket.seat_number = seat_number
+                    if ticket.seat_class == 'economy':
+                        facilities_price += ticket.flight.price_number_economy_seats
+                    else:
+                        facilities_price += ticket.flight.price_number_business_seats
 
                 ticket.save()
         except ValidationError as e:
@@ -395,6 +398,12 @@ def ticket_detail(request, ticket_id):
                 'error_message': error_message,
             })
 
+        if facilities_price:
+            FacilitiesOrder.objects.create(
+                ticket=ticket,
+                price=facilities_price
+            )
+
         send_tickets.apply_async(args=[ticket.id, user.email])
 
         return redirect('customer_interface:ticket_input')
@@ -412,3 +421,15 @@ def ticket_detail(request, ticket_id):
         'free_economy_seats': free_economy_seats,
         'free_business_seats': free_business_seats,
     })
+
+
+@permission_required(perm='customer_interface.change_ticket', raise_exception=True)
+def ticket_gate(request):
+    user = request.user
+    if request.method == 'POST':
+        ticket_id = request.POST.get('ticket_id')
+        ticket = Ticket.objects.get(id=ticket_id)
+        ticket.gate_manager = user
+        ticket.time_gate = datetime.now()
+        ticket.save()
+    return render(request, 'customer_interface/ticket_gate.html')

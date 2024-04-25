@@ -1,9 +1,7 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Ticket</title>
-</head>
+{% extends "index.html" %}
+
+{% block content %}
+
     {% if error_message %}
         <div class="alert alert-danger" role="alert">
           {{ error_message }}
@@ -33,15 +31,23 @@
         <label for="seat_number_new">Seat Number:</label>
         <input type="number" id="seat_number_new" name="seat_number">
         {% endif %}
+        {% if ticket.flight_facilities.exists %}
+            <p>Facilities:</p>
+                {% for ticket_facility in ticket.ticketfacilities_set.all %}
+                    <p>{{ ticket_facility.flight_facilities.facilities.facilities_name }}</p>
+                {% endfor %}
+        {% endif %}
         {% for facility in flight_facilities %}
+        {% if facility.facilities.id not in ticket_facility_ids %}
             <p>{{ facility.facilities.facilities_name }}
                 <label for="facility_{{ ticket.id }}_{{ facility.facilities.id }}">
                     <input type="checkbox" name="facilities_{{ ticket.id }}" id="facility_{{ ticket.id }}_{{ facility.facilities.id }}" value="{{ facility.facilities.id }}"
-                           {% if facility.facilities.id in ticket_facility_ids %} checked {% endif %}>
+                           {% if facility in ticket.facilities.all %} checked {% endif %}>
                 </label> Price: {{ facility.price }}<br>
             </p>
+        {% endif %}
         {% endfor %}
         <button type="submit">Save</button>
     </form>
     {% endif %}
-</html>
+{% endblock %}
