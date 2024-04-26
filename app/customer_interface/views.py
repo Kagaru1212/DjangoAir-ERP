@@ -1,29 +1,38 @@
+from datetime import datetime
 from functools import wraps
 
 from django.contrib import messages
+from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse_lazy
 from django.views import generic
 
 from .decorators import process_exception
 from .forms import TicketForm, TicketSelectionForm, SearchFlightForm
-from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities, Flight
+from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities, Flight, FacilitiesOrder
 from .tasks import send_tickets
 from .utils.ticket_seats import free_seats
 from .validators import update_ticket_validator, create_ticket_validator
 
 
-class IndexView(generic.ListView):
+class IndexView(LoginRequiredMixin, generic.ListView):
     model = Flight
     template_name = "base_user_interface.html"
+    login_url = reverse_lazy('users:login')
 
     def get_context_data(self, *, object_list=None, **kwargs):
         context = super().get_context_data()
+        user = self.request.user
+        basket = Basket.objects.get(user=user)
+        basket_items_count = basket.tickets.count()
         place_of_departure = self.request.GET.get("place_of_departure", "")
         place_of_arrival = self.request.GET.get("place_of_arrival", "")
         context["place_of_departure"] = place_of_departure
         context["place_of_arrival"] = place_of_arrival
+        context['basket_items_count'] = basket_items_count
         context['search_form'] = SearchFlightForm(
             initial={
                 "place_of_departure": place_of_departure,
@@ -116,6 +125,9 @@ class FlightDetailView(generic.DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         flight = self.get_object()
+        user = self.request.user
+        basket = Basket.objects.get(user=user)
+        basket_items_count = basket.tickets.count()
         available_economy_seats = flight.available_economy_seats
         available_business_seats = flight.available_business_seats
         total_economy_tickets = Ticket.objects.filter(flight=flight, seat_class='economy',
@@ -126,12 +138,14 @@ class FlightDetailView(generic.DetailView):
         available_business_seats -= total_business_tickets
 
         free_economy_seats = free_seats(flight, seat_class='economy')
-        free_business_seats = free_seats(flight, seat_class='business')  # This function returns the set of free spaces in the class
+        free_business_seats = free_seats(flight,
+                                         seat_class='business')  # This function returns the set of free spaces in the class
 
         context['free_economy_seats'] = free_economy_seats
         context['free_business_seats'] = free_business_seats
         context['available_economy_seats'] = available_economy_seats
         context['available_business_seats'] = available_business_seats
+        context['basket_items_count'] = basket_items_count
         return context
 
 
@@ -326,3 +340,96 @@ def buy_order(request, order_id):
         'order': order,
         'order_tickets': order_tickets,
     })
+
+
+@permission_required(perm='customer_interface.view_ticket', raise_exception=True)
+def ticket_input(request):
+    if request.method == 'POST':
+        ticket_id = request.POST.get('ticket_id')
+        return redirect('customer_interface:ticket_detail', ticket_id=ticket_id)
+    return render(request, 'customer_interface/ticket_input.html')
+
+
+@permission_required(perm='customer_interface.view_ticket', raise_exception=True)
+def ticket_detail(request, ticket_id):
+    user = request.user
+    ticket = Ticket.objects.get(id=ticket_id)
+    flight = ticket.flight
+    facilities_price = 0
+
+    if request.method == 'POST':
+        ticket.check_in_manager = user
+        ticket.time_check = datetime.now()
+
+        try:
+            with transaction.atomic():
+                facilities_ids = request.POST.getlist(f'facilities_{ticket.id}')
+                # Добавляем новые связи только для выбранных удобств
+                for facility_id in facilities_ids:
+                    facilities = TicketFacilities.objects.create(
+                        ticket=ticket,
+                        flight_facilities=FlightFacilities.objects.get(id=facility_id),
+                    )
+                    facilities_price += facilities.flight_facilities.price
+
+                seat_number = request.POST.get('seat_number')
+                if seat_number:
+                    update_ticket_validator(ticket.seat_class, seat_number, ticket.flight, Ticket)
+                    ticket.seat_number = seat_number
+                    if ticket.seat_class == 'economy':
+                        facilities_price += ticket.flight.price_number_economy_seats
+                    else:
+                        facilities_price += ticket.flight.price_number_business_seats
+
+                ticket.save()
+        except ValidationError as e:
+            error_message = str(e)
+
+            flight_facilities = FlightFacilities.objects.filter(flight=ticket.flight)
+
+            free_economy_seats = free_seats(flight, seat_class='economy')
+            free_business_seats = free_seats(flight, seat_class='business')
+
+            return render(request, 'customer_interface/ticket_detail.html', {
+                'ticket': ticket,
+                'flight_facilities': flight_facilities,
+                'free_economy_seats': free_economy_seats,
+                'free_business_seats': free_business_seats,
+                'error_message': error_message,
+            })
+
+        if facilities_price:
+            FacilitiesOrder.objects.create(
+                ticket=ticket,
+                price=facilities_price
+            )
+
+        send_tickets.apply_async(args=[ticket.id, user.email])
+
+        return redirect('customer_interface:ticket_input')
+
+    flight_facilities = FlightFacilities.objects.filter(flight=ticket.flight)
+    ticket_facility_ids = ticket.flight_facilities.values_list('id', flat=True)
+
+    free_economy_seats = free_seats(flight, seat_class='economy')
+    free_business_seats = free_seats(flight, seat_class='business')
+
+    return render(request, 'customer_interface/ticket_detail.html', {
+        'ticket': ticket,
+        'flight_facilities': flight_facilities,
+        'ticket_facility_ids': ticket_facility_ids,
+        'free_economy_seats': free_economy_seats,
+        'free_business_seats': free_business_seats,
+    })
+
+
+@permission_required(perm='customer_interface.change_ticket', raise_exception=True)
+def ticket_gate(request):
+    user = request.user
+    if request.method == 'POST':
+        ticket_id = request.POST.get('ticket_id')
+        ticket = Ticket.objects.get(id=ticket_id)
+        ticket.gate_manager = user
+        ticket.time_gate = datetime.now()
+        ticket.save()
+    return render(request, 'customer_interface/ticket_gate.html')
