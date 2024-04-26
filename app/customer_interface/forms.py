@@ -1,6 +1,7 @@
 from django import forms
+from django.forms import inlineformset_factory
 
-from .models import Ticket
+from .models import Ticket, Flight, FlightFacilities
 
 
 class TicketForm(forms.ModelForm):
@@ -32,5 +33,41 @@ class SearchFlightForm(forms.Form):
         label="",
         widget=forms.TextInput(
             attrs={"placeholder": "Search by place of arrival"}
+        )
+    )
+
+
+class CreateFlight(forms.ModelForm):
+    class Meta:
+        model = Flight
+        exclude = ['available_economy_seats', 'available_business_seats', 'facilities']
+
+
+class FlightFacilitiesForm(forms.ModelForm):
+    class Meta:
+        model = FlightFacilities
+        fields = ['facilities', 'price']
+        widgets = {
+            'facilities': forms.Select(attrs={'class': 'form-control'}),
+            'price': forms.NumberInput(attrs={'class': 'form-control'}),
+        }
+
+
+FlightFacilitiesFormSet = inlineformset_factory(
+    Flight,
+    FlightFacilities,
+    form=FlightFacilitiesForm,
+    extra=2,
+    can_delete=False,
+)
+
+
+class SearchUserForm(forms.Form):
+    email = forms.CharField(
+        max_length=255,
+        required=False,
+        label="",
+        widget=forms.TextInput(
+            attrs={"placeholder": "Search by user email"}
         )
     )

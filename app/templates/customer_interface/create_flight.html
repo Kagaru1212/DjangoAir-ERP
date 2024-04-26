@@ -1,0 +1,50 @@
+{% extends "index.html" %}
+{% load tailwind_filters %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+
+    {% if flight_form.errors %}
+        {% for error in flight_form.errors %}
+        {% endfor %}
+    {% endif %}
+<div class="container mx-auto">
+    <h1>Create Flight</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ flight_form|crispy }}
+        <hr>
+        <h3>Flight Facilities</h3>
+        {{ flight_facilities_formset.management_form }}
+        <div id="formset-container">
+            {% for form in flight_facilities_formset %}
+                <div class="formset-row">
+                    {{ form|crispy }}
+                </div>
+            {% endfor %}
+        </div>
+        <button type="button" id="add-form" class="btn btn-secondary">Add Facility</button>
+        <button type="submit" class="btn btn-secondary" name="create">Create</button>
+    </form>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const addFormButton = document.getElementById('add-form');
+    let formCount = {{ flight_facilities_formset.total_form_count }};
+
+    addFormButton.addEventListener('click', function() {
+        const formTemplate = '{{ flight_facilities_formset.empty_form|escapejs }}';
+        const formsetRow = document.createElement('div');
+        formsetRow.classList.add('formset-row');
+        formsetRow.innerHTML = formTemplate.replace(/__prefix__/g, formCount);
+        document.getElementById('formset-container').appendChild(formsetRow);
+        formCount++;
+
+        // Initialize crispy forms for the new form
+        const newForm = $(".formset-row").last();
+        newForm.find(".form-control").addClass('crispy-form');
+    });
+});
+</script>
+{% endblock %}

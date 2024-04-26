@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'celery',
     "crispy_forms",
     "crispy_bootstrap5",
+    "crispy_tailwind",
 ]
 
 MIDDLEWARE = [

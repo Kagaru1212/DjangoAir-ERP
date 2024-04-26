@@ -16,3 +16,5 @@ crispy-bootstrap5==2024.2
 django-crispy-forms==2.1
 reportlab==4.2.0
 segno==1.6.1
+crispy-tailwind==1.0.3
+
