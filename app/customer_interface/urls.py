@@ -16,7 +16,8 @@ urlpatterns = [
     path('ticket_input/', views.ticket_input, name='ticket_input'),
     path('ticket_detail/<int:ticket_id>/', views.ticket_detail, name='ticket_detail'),
     path('ticket_gate/', views.ticket_gate, name='ticket_gate'),
-    path('create_flight/', views.create_flight, name='create_flight'),
+    path('create_flight/', views.CreateFlightView.as_view(), name='create_flight'),
     path('users_list/', views.UsersList.as_view(), name='users_list'),
     path('save_user_groups/', views.SaveUserGroupsView.as_view(), name='save_user_groups'),
+    path('flight_stats/<int:pk>/', views.flight_stats, name='flight_stats'),
 ]

@@ -38,6 +38,24 @@ class SearchFlightForm(forms.Form):
 
 
 class CreateFlight(forms.ModelForm):
+    date_time_of_departure = forms.DateTimeField(
+        widget=forms.DateInput(
+            attrs={
+                'class': 'form-control',
+                'type': 'datetime-local'
+            }
+        )
+    )
+
+    date_time_of_arrival = forms.DateTimeField(
+        widget=forms.DateInput(
+            attrs={
+                'class': 'form-control',
+                'type': 'datetime-local'
+            }
+        )
+    )
+
     class Meta:
         model = Flight
         exclude = ['available_economy_seats', 'available_business_seats', 'facilities']
@@ -57,7 +75,7 @@ FlightFacilitiesFormSet = inlineformset_factory(
     Flight,
     FlightFacilities,
     form=FlightFacilitiesForm,
-    extra=2,
+    extra=1,
     can_delete=False,
 )
 

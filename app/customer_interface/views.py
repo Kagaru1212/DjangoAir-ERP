@@ -43,6 +43,22 @@ class IndexView(LoginRequiredMixin, generic.ListView):
                 "place_of_arrival": place_of_arrival,
             }
         )
+
+        flight_tickets = {}
+        check_in_tickets = {}
+        gate_tickets = {}
+        for flight in context['object_list']:
+            tickets_count = Ticket.objects.filter(flight=flight, status='checked_out').count()
+            tickets_check_in = Ticket.objects.filter(flight=flight, status='checked_out',
+                                                     check_in_manager__isnull=False).count()
+            tickets_gate = Ticket.objects.filter(flight=flight, status='checked_out',
+                                                 gate_manager__isnull=False).count()
+            flight_tickets[flight.pk] = tickets_count
+            check_in_tickets[flight.pk] = tickets_check_in
+            gate_tickets[flight.pk] = tickets_gate
+        context['flight_tickets'] = flight_tickets
+        context['check_in_tickets'] = check_in_tickets
+        context['gate_tickets'] = gate_tickets
         return context
 
     def get_queryset(self):
@@ -439,31 +455,43 @@ def ticket_gate(request):
     return render(request, 'customer_interface/ticket_gate.html')
 
 
-@permission_required(perm='customer_interface.add_flight', raise_exception=True)
-def create_flight(request):
-    if request.method == 'POST':
+class CreateFlightView(PermissionRequiredMixin, LoginRequiredMixin, View):
+    login_url = reverse_lazy('users:login')
+    permission_required = 'customer_interface.add_flight'
+
+    def get(self, request):
+        flight_form = CreateFlight()
+        flight_facilities_formset = FlightFacilitiesFormSet(instance=Flight())
+        context = {
+            'flight_form': flight_form,
+            'flight_facilities_formset': flight_facilities_formset,
+        }
+        return render(request, 'customer_interface/create_flight.html', context)
+
+    def post(self, request):
         flight_form = CreateFlight(request.POST)
         flight_facilities_formset = FlightFacilitiesFormSet(request.POST, instance=Flight())
 
-        if flight_form.is_valid() and flight_facilities_formset.is_valid():
+        if 'add_facility' in request.POST:
+            if flight_facilities_formset.is_valid():
+                flight_facilities_formset = FlightFacilitiesFormSet(instance=Flight(), queryset=Flight.objects.none())
+                flight_facilities_formset.extra += 1
+                context = {
+                    'flight_form': flight_form,
+                    'flight_facilities_formset': flight_facilities_formset,
+                }
+                return render(request, 'customer_interface/create_flight.html', context)
+        elif flight_form.is_valid() and flight_facilities_formset.is_valid():
             flight = flight_form.save()
             flight_facilities_formset.instance = flight
             flight_facilities_formset.save()
-
             return redirect('customer_interface:basket')
         else:
-            return render(request, 'customer_interface/create_flight.html', {
+            context = {
                 'flight_form': flight_form,
                 'flight_facilities_formset': flight_facilities_formset,
-            })
-
-    flight_form = CreateFlight()
-    flight_facilities_formset = FlightFacilitiesFormSet(instance=Flight())
-
-    return render(request, 'customer_interface/create_flight.html', {
-        'flight_form': flight_form,
-        'flight_facilities_formset': flight_facilities_formset,
-    })
+            }
+            return render(request, 'customer_interface/create_flight.html', context)
 
 
 class UsersList(PermissionRequiredMixin, LoginRequiredMixin, generic.ListView):
@@ -510,8 +538,6 @@ class SaveUserGroupsView(View):
         # Получаем объекты пользователей из базы данных
         users_to_update = get_user_model().objects.filter(is_superuser=False)
 
-        print(users_to_update)
-
         # Обновляем группы пользователей в зависимости от состояния чекбоксов
         for user in users_to_update:
             if str(user.id) in check_in_manager_users:
@@ -533,3 +559,17 @@ class SaveUserGroupsView(View):
                     user.groups.remove(gate_manager_group)
 
         return HttpResponseRedirect(reverse('customer_interface:users_list') + "?email=" + email)
+
+
+@permission_required(perm='customer_interface.view_flight', raise_exception=True)
+def flight_stats(request, pk):
+    flight = get_object_or_404(Flight, pk=pk)
+    tickets = Ticket.objects.filter(flight=flight)
+    total_economy_tickets = Ticket.objects.filter(flight=flight, seat_class='economy', status='checked_out').count()
+    total_business_tickets = Ticket.objects.filter(flight=flight, seat_class='business', status='checked_out').count()
+    return render(request, 'customer_interface/flight_stats.html', {
+        'flight': flight,
+        'tickets': tickets,
+        'total_economy_tickets': total_economy_tickets,
+        'total_business_tickets': total_business_tickets,
+    })

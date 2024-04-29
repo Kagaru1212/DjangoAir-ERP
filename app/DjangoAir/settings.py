@@ -84,6 +84,9 @@ TEMPLATES = [
                 'social_django.context_processors.login_redirect',
                 'social_django.context_processors.backends',
             ],
+            'libraries': {
+                'filter': 'templatetags.filter',
+            }
         },
     },
 ]
@@ -130,7 +133,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Europe/Kiev'
 
 USE_I18N = True
 

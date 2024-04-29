@@ -1,5 +1,6 @@
 {% load static %}
 {% load crispy_forms_filters %}
+{% load filter %}
 
 <!DOCTYPE html>
 <html>
@@ -46,7 +47,50 @@
                         {% if object_list %}
                             <ul>
                                 {% for flight in object_list %}
-                                    <li><a href="{% url 'customer_interface:flight_detail' flight.pk %}">{{ flight.place_of_departure }} - {{ flight.place_of_arrival }}: {{ flight.date_time_of_departure }}</a></li>
+                                    <table class="table">
+                                        <thead>
+                                            <tr>
+                                                <th style="min-width: 500px;">Flight</th>
+                                                {% if perms.customer_interface.add_flight %}
+                                                    <th>Sold</th>
+                                                    <th>Check In</th>
+                                                    <th>Gate</th>
+                                                    <th>Stats</th>
+                                                {% endif %}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td><a href="{% url 'customer_interface:flight_detail' flight.pk %}">{{ flight.place_of_departure }} - {{ flight.place_of_arrival }}: {{ flight.date_time_of_departure }}</a></td>
+                                                {% if perms.customer_interface.add_flight %}
+                                                    <td><span class="btn btn-info">Sold: {{ flight_tickets|flight_ticket_value:flight.pk }}</span></td>
+                                                    <td>
+                                                        {% if flight_tickets|flight_ticket_value:flight.pk > check_in_tickets|check_in_tickets_value:flight.pk %}
+                                                            {% if flight.date_time_of_departure|time_until_now > 3600 %}
+                                                                <span class="btn btn-warning">Check In: {{ check_in_tickets|check_in_tickets_value:flight.pk }}</span>
+                                                            {% else %}
+                                                                <span class="btn btn-danger">Check In: {{ check_in_tickets|check_in_tickets_value:flight.pk }}</span>
+                                                            {% endif %}
+                                                        {% else %}
+                                                            <span class="btn btn-success">Check In: {{ check_in_tickets|check_in_tickets_value:flight.pk }}</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        {% if flight_tickets|flight_ticket_value:flight.pk > gate_tickets|gate_tickets_value:flight.pk %}
+                                                            {% if flight.date_time_of_departure|time_until_now > 1800 %}
+                                                                <span class="btn btn-warning">Check In: {{ gate_tickets|gate_tickets_value:flight.pk }}</span>
+                                                            {% else %}
+                                                                <span class="btn btn-danger">Check In: {{ gate_tickets|gate_tickets_value:flight.pk }}</span>
+                                                            {% endif %}
+                                                        {% else %}
+                                                            <span class="btn btn-success">Check In: {{ gate_tickets|gate_tickets_value:flight.pk }}</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td><a href="{% url 'customer_interface:flight_stats' pk=flight.pk %}" class="btn btn-secondary">Flight Stats</a></td>
+                                                {% endif %}
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 {% endfor %}
                             </ul>
                         {% else %}
