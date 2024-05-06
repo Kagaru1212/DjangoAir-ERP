@@ -2,16 +2,20 @@ from datetime import datetime
 from functools import wraps
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import permission_required
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
+from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.http import HttpResponseRedirect
 from django.shortcuts import render, redirect, get_object_or_404
-from django.urls import reverse_lazy
-from django.views import generic
+from django.urls import reverse_lazy, reverse
+from django.views import generic, View
 
 from .decorators import process_exception
-from .forms import TicketForm, TicketSelectionForm, SearchFlightForm
+from .forms import TicketForm, TicketSelectionForm, SearchFlightForm, CreateFlight, FlightFacilitiesFormSet, \
+    SearchUserForm
 from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities, Flight, FacilitiesOrder
 from .tasks import send_tickets
 from .utils.ticket_seats import free_seats
@@ -39,6 +43,22 @@ class IndexView(LoginRequiredMixin, generic.ListView):
                 "place_of_arrival": place_of_arrival,
             }
         )
+
+        flight_tickets = {}
+        check_in_tickets = {}
+        gate_tickets = {}
+        for flight in context['object_list']:
+            tickets_count = Ticket.objects.filter(flight=flight, status='checked_out').count()
+            tickets_check_in = Ticket.objects.filter(flight=flight, status='checked_out',
+                                                     check_in_manager__isnull=False).count()
+            tickets_gate = Ticket.objects.filter(flight=flight, status='checked_out',
+                                                 gate_manager__isnull=False).count()
+            flight_tickets[flight.pk] = tickets_count
+            check_in_tickets[flight.pk] = tickets_check_in
+            gate_tickets[flight.pk] = tickets_gate
+        context['flight_tickets'] = flight_tickets
+        context['check_in_tickets'] = check_in_tickets
+        context['gate_tickets'] = gate_tickets
         return context
 
     def get_queryset(self):
@@ -423,7 +443,7 @@ def ticket_detail(request, ticket_id):
     })
 
 
-@permission_required(perm='customer_interface.change_ticket', raise_exception=True)
+@permission_required(perm='customer_interface.add_ticket', raise_exception=True)
 def ticket_gate(request):
     user = request.user
     if request.method == 'POST':
@@ -433,3 +453,123 @@ def ticket_gate(request):
         ticket.time_gate = datetime.now()
         ticket.save()
     return render(request, 'customer_interface/ticket_gate.html')
+
+
+class CreateFlightView(PermissionRequiredMixin, LoginRequiredMixin, View):
+    login_url = reverse_lazy('users:login')
+    permission_required = 'customer_interface.add_flight'
+
+    def get(self, request):
+        flight_form = CreateFlight()
+        flight_facilities_formset = FlightFacilitiesFormSet(instance=Flight())
+        context = {
+            'flight_form': flight_form,
+            'flight_facilities_formset': flight_facilities_formset,
+        }
+        return render(request, 'customer_interface/create_flight.html', context)
+
+    def post(self, request):
+        flight_form = CreateFlight(request.POST)
+        flight_facilities_formset = FlightFacilitiesFormSet(request.POST, instance=Flight())
+
+        if 'add_facility' in request.POST:
+            if flight_facilities_formset.is_valid():
+                flight_facilities_formset = FlightFacilitiesFormSet(instance=Flight(), queryset=Flight.objects.none())
+                flight_facilities_formset.extra += 1
+                context = {
+                    'flight_form': flight_form,
+                    'flight_facilities_formset': flight_facilities_formset,
+                }
+                return render(request, 'customer_interface/create_flight.html', context)
+        elif flight_form.is_valid() and flight_facilities_formset.is_valid():
+            flight = flight_form.save()
+            flight_facilities_formset.instance = flight
+            flight_facilities_formset.save()
+            return redirect('customer_interface:basket')
+        else:
+            context = {
+                'flight_form': flight_form,
+                'flight_facilities_formset': flight_facilities_formset,
+            }
+            return render(request, 'customer_interface/create_flight.html', context)
+
+
+class UsersList(PermissionRequiredMixin, LoginRequiredMixin, generic.ListView):
+    model = get_user_model()
+    template_name = "customer_interface/users_list.html"
+    login_url = reverse_lazy('users:login')
+    permission_required = 'customer_interface.add_flight'
+
+    def get_context_data(self, *, object_list=None, **kwargs):
+        context = super().get_context_data()
+        email = self.request.GET.get("email", "")
+        context["email"] = email
+        context['search_form'] = SearchUserForm(
+            initial={"email": email}
+        )
+        gate_manager_group = Group.objects.get(name="gate_manager")
+        check_in_manager_group = Group.objects.get(name="check_in_manager")
+        context['check_in_manager_group'] = check_in_manager_group
+        context['gate_manager_group'] = gate_manager_group
+        return context
+
+    def get_queryset(self):
+        email = self.request.GET.get("email")
+        queryset = super().get_queryset()
+
+        queryset = queryset.filter(is_superuser=False)
+
+        if email:
+            queryset = queryset.filter(email__icontains=email)
+
+        return queryset
+
+
+class SaveUserGroupsView(View):
+    def post(self, request, *args, **kwargs):
+        email = request.POST.get("email")
+        check_in_manager_group = Group.objects.get(name='check_in_manager')
+        gate_manager_group = Group.objects.get(name='gate_manager')
+
+        # Получаем списки идентификаторов пользователей для каждой группы
+        check_in_manager_users = request.POST.getlist('check_in_manager_users[]')
+        gate_manager_users = request.POST.getlist('gate_manager_users[]')
+
+        # Получаем объекты пользователей из базы данных
+        users_to_update = get_user_model().objects.filter(is_superuser=False)
+
+        # Обновляем группы пользователей в зависимости от состояния чекбоксов
+        for user in users_to_update:
+            if str(user.id) in check_in_manager_users:
+                # Если чекбокс активен, добавляем пользователя в группу
+                if check_in_manager_group not in user.groups.all():
+                    user.groups.add(check_in_manager_group)
+            else:
+                # Если чекбокс не активен, удаляем пользователя из группы
+                if check_in_manager_group in user.groups.all():
+                    user.groups.remove(check_in_manager_group)
+
+            if str(user.id) in gate_manager_users:
+                # Если чекбокс активен, добавляем пользователя в группу
+                if gate_manager_group not in user.groups.all():
+                    user.groups.add(gate_manager_group)
+            else:
+                # Если чекбокс не активен, удаляем пользователя из группы
+                if gate_manager_group in user.groups.all():
+                    user.groups.remove(gate_manager_group)
+
+        return HttpResponseRedirect(reverse('customer_interface:users_list') + "?email=" + email)
+
+
+@permission_required(perm='customer_interface.view_flight', raise_exception=True)
+def flight_stats(request, pk):
+    flight = get_object_or_404(Flight, pk=pk)
+    tickets = Ticket.objects.filter(flight=flight)
+    total_economy_tickets = Ticket.objects.filter(flight=flight, seat_class='economy', status='checked_out').count()
+    total_business_tickets = Ticket.objects.filter(flight=flight, seat_class='business', status='checked_out').count()
+    return render(request, 'customer_interface/flight_stats.html', {
+        'flight': flight,
+        'tickets': tickets,
+        'total_economy_tickets': total_economy_tickets,
+        'total_business_tickets': total_business_tickets,
+    })
