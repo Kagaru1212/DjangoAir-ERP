@@ -46,8 +46,9 @@ INSTALLED_APPS = [
     'customer_interface.apps.CustomerInterfaceConfig',
     'social_django',
     'debug_toolbar',
-    'django_celery_results',
+    'rest_framework',
     'django_celery_beat',
+    'django_celery_results',
     'celery',
     "crispy_forms",
     "crispy_bootstrap5",
@@ -144,12 +145,13 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = (
     os.path.join(BASE_DIR, "static"),
 )
 
 LOGIN_REDIRECT_URL = '/'
-LOGOUT_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'  # docker-compose -f docker-compose.prod.yml up --build | docker-compose -f docker-compose.prod.yml down -v | docker-compose -f docker-compose.prod.yml restart django | Get-Item -Path .\app\enterpoint.sh | ForEach-Object { $_.IsReadOnly = $false }
 LOGIN_URL = 'users:login'
 
 # Default primary key field type

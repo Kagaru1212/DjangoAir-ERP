@@ -13,12 +13,17 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.views import generic, View
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+
 from .decorators import process_exception
 from .forms import TicketForm, TicketSelectionForm, SearchFlightForm, CreateFlight, FlightFacilitiesFormSet, \
     SearchUserForm
 from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities, Flight, FacilitiesOrder
 from .tasks import send_tickets
 from .utils.ticket_seats import free_seats
+from .utils.wayforpay import create_request_params, send_request, handle_response, generate_response_signature, \
+    SECRET_KEY
 from .validators import update_ticket_validator, create_ticket_validator
 
 
@@ -347,19 +352,44 @@ def buy_order(request, order_id):
     order_tickets = order.tickets.all()
 
     if request.method == 'POST':
-        for ticket in order_tickets:
-            ticket.status = 'checked_out'
-            ticket.save()
+        request_params = create_request_params(order.price, order.user.email, order_tickets.count(), order_id)
+        response = send_request(request_params)
+        result = handle_response(response)
+        print(result)
 
-            send_tickets.apply_async(args=[ticket.id, ticket.order.user.email])
-
-        # Redirect to the Basket page
         return redirect('customer_interface:basket')
 
     return render(request, 'customer_interface/buy_order.html', {
         'order': order,
         'order_tickets': order_tickets,
     })
+
+
+class WayForPayCallback(APIView):
+    def post(self, request):
+        print(request.data)
+        # Проверка корректности запроса и получение данных
+        orderReference = request.data.get("orderReference")
+        status = request.data.get("status")
+        time = request.data.get("time")
+        signature = request.data.get("signature")
+        order_id = request.data.get("order_id")
+        print(order_id)
+
+        # Проверка подлинности запроса
+        expected_signature = generate_response_signature(orderReference, status, time, SECRET_KEY)
+        if signature != expected_signature:
+            return Response({"error": "Invalid signature"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Отправить ответ WayForPay о принятии заказа
+        response_data = {
+            "orderReference": orderReference,
+            "status": "accept",
+            "time": time,
+            "signature": generate_response_signature(orderReference, "accept", time, SECRET_KEY)
+        }
+
+        return Response(response_data)
 
 
 @permission_required(perm='customer_interface.view_ticket', raise_exception=True)

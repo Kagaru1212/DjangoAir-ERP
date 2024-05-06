@@ -60,4 +60,3 @@ def send_ticket_email(ticket, email):
     email = EmailMessage(subject, message, email_from, recipient_list)
     email.attach_file(pdf_path)
     email.send()
-
