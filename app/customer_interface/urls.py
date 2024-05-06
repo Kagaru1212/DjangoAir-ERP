@@ -13,4 +13,7 @@ urlpatterns = [
     path('buy_order/<int:order_id>/', views.buy_order, name='buy_order'),
     path('home/', views.IndexView.as_view(), name='home'),
     path('flight/<int:pk>/', views.FlightDetailView.as_view(), name='flight_detail'),
+    path('ticket_input/', views.ticket_input, name='ticket_input'),
+    path('ticket_detail/<int:ticket_id>/', views.ticket_detail, name='ticket_detail'),
+    path('ticket_gate/', views.ticket_gate, name='ticket_gate'),
 ]
