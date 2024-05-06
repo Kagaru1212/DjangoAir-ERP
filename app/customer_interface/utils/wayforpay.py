@@ -1,4 +1,4 @@
-from random import randint
+import base64
 
 import time
 import requests
@@ -18,9 +18,18 @@ def generate_hmac(data, secret_key):
     return hmac.new(secret_key, message, hashlib.md5).hexdigest()
 
 
-# Функция для формирования параметров запроса
+# Кодирование идентификатора заказа
+def encode_order_reference(order_id):
+    return base64.urlsafe_b64encode(str(order_id).encode()).decode()
+
+
+# Декодирование идентификатора заказа
+def decode_order_reference(encoded_order_reference):
+    return int(base64.urlsafe_b64decode(encoded_order_reference.encode()).decode())
+
+
 def create_request_params(price, email, ticket_count, order_id):
-    orderReference = f"DH{randint(1000000000, 9999999999)}"
+    orderReference = encode_order_reference(order_id)
     orderDate = int(time.time())
 
     params = {

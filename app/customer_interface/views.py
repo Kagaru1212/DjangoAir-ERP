@@ -15,6 +15,7 @@ from django.views import generic, View
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.status import HTTP_400_BAD_REQUEST
 
 from .decorators import process_exception
 from .forms import TicketForm, TicketSelectionForm, SearchFlightForm, CreateFlight, FlightFacilitiesFormSet, \
@@ -23,7 +24,7 @@ from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities, F
 from .tasks import send_tickets
 from .utils.ticket_seats import free_seats
 from .utils.wayforpay import create_request_params, send_request, handle_response, generate_response_signature, \
-    SECRET_KEY
+    SECRET_KEY, decode_order_reference, generate_hmac
 from .validators import update_ticket_validator, create_ticket_validator
 
 
@@ -368,18 +369,26 @@ def buy_order(request, order_id):
 class WayForPayCallback(APIView):
     def post(self, request):
         print(request.data)
-        # Проверка корректности запроса и получение данных
         orderReference = request.data.get("orderReference")
-        status = request.data.get("status")
+        status = request.data.get("reasonCode")
         time = request.data.get("time")
         signature = request.data.get("signature")
-        order_id = request.data.get("order_id")
-        print(order_id)
+        order_id = decode_order_reference(request.data.get("orderReference"))
 
         # Проверка подлинности запроса
-        expected_signature = generate_response_signature(orderReference, status, time, SECRET_KEY)
+        expected_signature = generate_hmac(request.data, SECRET_KEY)
         if signature != expected_signature:
-            return Response({"error": "Invalid signature"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Invalid signature"}, status=HTTP_400_BAD_REQUEST)
+
+        if status == "1100":
+            order = Order.objects.get(id=order_id)
+            order_tickets = order.tickets.all()
+
+            for ticket in order_tickets:
+                ticket.status = 'checked_out'
+                ticket.save()
+
+                send_tickets.apply_async(args=[ticket.id, ticket.order.user.email])
 
         # Отправить ответ WayForPay о принятии заказа
         response_data = {
