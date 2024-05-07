@@ -373,7 +373,9 @@ class WayForPayCallback(APIView):
         status = request.data.get("reasonCode")
         time = request.data.get("time")
         signature = request.data.get("signature")
-        order_id = decode_order_reference(request.data.get("orderReference"))
+        order_id = decode_order_reference(orderReference)
+        print(order_id)
+        print(orderReference)
 
         # Проверка подлинности запроса
         expected_signature = generate_hmac(request.data, SECRET_KEY)
