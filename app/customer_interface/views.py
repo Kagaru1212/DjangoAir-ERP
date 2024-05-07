@@ -396,11 +396,12 @@ class WayForPayCallback(APIView):
 
                 send_tickets.apply_async(args=[ticket.id, ticket.order.user.email])
 
+        time_str = str(time_now)
         # Отправить ответ WayForPay о принятии заказа
         response_data = {
             "orderReference": orderReference,
             "status": "accept",
-            "time": time_now,
+            "time": time_str,
             "signature": generate_response_signature(orderReference, "accept", time, SECRET_KEY)
         }
         print(response_data)
