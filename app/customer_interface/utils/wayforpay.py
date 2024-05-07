@@ -19,13 +19,15 @@ def generate_hmac(data, secret_key):
 
 
 # Кодирование идентификатора заказа
-def encode_order_reference(order_id):
+def encode_order_reference(order):
+    order_id = int(order) + 1000000
     return base64.urlsafe_b64encode(str(order_id).encode()).decode()
 
 
 # Декодирование идентификатора заказа
-def decode_order_reference(encoded_order_reference):
-    return int(base64.urlsafe_b64decode(encoded_order_reference.encode()).decode())
+def decode_order_reference(order_id):
+    order_id = base64.urlsafe_b64decode(order_id.encode()).decode()
+    return int(order_id) - 1000000
 
 
 def create_request_params(price, email, ticket_count, order_id):
