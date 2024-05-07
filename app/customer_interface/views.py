@@ -404,8 +404,9 @@ class WayForPayCallback(APIView):
             "signature": generate_response_signature(orderReference, "accept", time, SECRET_KEY)
         }
         print(response_data)
+        send_request(response_data)
 
-        return Response(response_data)
+        return Response({})
 
 
 @permission_required(perm='customer_interface.view_ticket', raise_exception=True)
