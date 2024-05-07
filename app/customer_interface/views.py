@@ -406,10 +406,11 @@ class WayForPayCallback(APIView):
         data_to_sign = [
             response_data["orderReference"],
             response_data["status"],
-            response_data["time"],
+            str(response_data["time"]),
         ]
         print(response_data)
         response_data["signature"] = generate_hmac(data_to_sign, SECRET_KEY)
+        print(response_data)
 
         return Response(response_data)
 
