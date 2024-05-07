@@ -18,15 +18,21 @@ def generate_hmac(data, secret_key):
     return hmac.new(secret_key, message, hashlib.md5).hexdigest()
 
 
+def generate_response_signature(orderReference, status, time, secret_key):
+    data = f"{orderReference};{status};{time}".encode('utf-8')
+    signature = hmac.new(secret_key.encode('utf-8'), data, hashlib.md5).hexdigest()
+    return signature
+
+
 # Кодирование идентификатора заказа
 def encode_order_reference(order):
-    order_id = int(order) + 1000000
+    order_id = int(order) + 10000000
     return hex(order_id)[2:]
 
 
 # Декодирование идентификатора заказа
 def decode_order_reference(order_id):
-    return int(order_id, 16) - 1000000
+    return int(order_id, 16) - 10000000
 
 
 def create_request_params(price, email, ticket_count, order_id):
@@ -88,9 +94,3 @@ def handle_response(response):
         return response_data
     else:
         return {"error": f"Ошибка при выполнении запроса: {response.status_code}"}
-
-
-def generate_response_signature(orderReference, status, time, secret_key):
-    data = f"{orderReference};{status};{time}".encode('utf-8')
-    signature = hashlib.md5(data + secret_key.encode('utf-8')).hexdigest()
-    return signature
