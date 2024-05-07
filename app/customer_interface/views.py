@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from functools import wraps
 
@@ -369,12 +370,15 @@ def buy_order(request, order_id):
 class WayForPayCallback(APIView):
     def post(self, request):
         print(request.data)
-        data = request.data.dict()  # Преобразовать QueryDict в обычный словарь
-        orderReference = data.get("orderReference")
-        status = data.get("reasonCode")
-        time = data.get("time")
-        signature = data.get("signature")
-        print(data)
+        data_string = list(request.data.keys())[0]
+        data_dict = json.loads(data_string)
+
+        # Доступ к параметру orderReference
+        orderReference = data_dict.get("orderReference")
+        status = data_dict.get("reasonCode")
+        time = data_dict.get("time")
+        signature = data_dict.get("signature")
+        print(data_dict)
         print(orderReference)
         order_id = decode_order_reference(orderReference)
         print(order_id)
