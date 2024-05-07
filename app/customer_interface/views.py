@@ -377,16 +377,11 @@ class WayForPayCallback(APIView):
         orderReference = data_dict.get("orderReference")
         status = data_dict.get("reasonCode")
         time = data_dict.get("time")
-        signature = data_dict.get("signature")
+        print(status)
         print(data_dict)
         print(orderReference)
         order_id = decode_order_reference(orderReference)
         print(order_id)
-
-        # Проверка подлинности запроса
-        expected_signature = generate_hmac(request.data, SECRET_KEY)
-        if signature != expected_signature:
-            return Response({"error": "Invalid signature"}, status=HTTP_400_BAD_REQUEST)
 
         if status == "1100":
             order = Order.objects.get(id=order_id)
