@@ -376,9 +376,8 @@ class WayForPayCallback(APIView):
         # Доступ к параметру orderReference
         orderReference = data_dict.get("orderReference")
         code = data_dict.get("reasonCode")
-        status = data_dict.get("status")
         time = data_dict.get("time")
-        print(status)
+        print(code)
         print(data_dict)
         print(orderReference)
         order_id = decode_order_reference(orderReference)
@@ -395,12 +394,11 @@ class WayForPayCallback(APIView):
                 send_tickets.apply_async(args=[ticket.id, ticket.order.user.email])
 
         # Отправить ответ WayForPay о принятии заказа
-        signature = generate_response_signature(orderReference, status, time, SECRET_KEY)
         response_data = {
             "orderReference": orderReference,
             "status": "accept",
             "time": time,
-            "signature": signature
+            "signature": generate_response_signature(orderReference, "accept", time, SECRET_KEY)
         }
 
         return Response(response_data)
