@@ -396,21 +396,22 @@ class WayForPayCallback(APIView):
 
                 send_tickets.apply_async(args=[ticket.id, ticket.order.user.email])
 
-        time_str = str(time_now)
         # Отправить ответ WayForPay о принятии заказа
         response_data = {
             "orderReference": orderReference,
             "status": "accept",
-            "time": time_str,
-            "signature": generate_response_signature(orderReference, "accept", time, SECRET_KEY)
+            "time": time_now,
         }
+
+        data_to_sign = [
+            response_data["orderReference"],
+            response_data["status"],
+            response_data["time"],
+        ]
         print(response_data)
-        # Преобразовать данные в формат JSON
-        json_data = json.dumps(response_data)
+        response_data["signature"] = generate_hmac(data_to_sign, SECRET_KEY)
 
-        # Отправить данные в формате JSON
-        return Response(json_data, content_type='application/json')
-
+        return Response(response_data)
 
 
 @permission_required(perm='customer_interface.view_ticket', raise_exception=True)
