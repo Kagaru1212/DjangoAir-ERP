@@ -404,9 +404,12 @@ class WayForPayCallback(APIView):
             "signature": generate_response_signature(orderReference, "accept", time, SECRET_KEY)
         }
         print(response_data)
-        send_request(response_data)
+        # Преобразовать данные в формат JSON
+        json_data = json.dumps(response_data)
 
-        return Response({})
+        # Отправить данные в формате JSON
+        return Response(json_data, content_type='application/json')
+
 
 
 @permission_required(perm='customer_interface.view_ticket', raise_exception=True)
