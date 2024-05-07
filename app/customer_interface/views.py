@@ -1,4 +1,6 @@
 import json
+import time
+
 from datetime import datetime
 from functools import wraps
 
@@ -376,7 +378,8 @@ class WayForPayCallback(APIView):
         # Доступ к параметру orderReference
         orderReference = data_dict.get("orderReference")
         code = data_dict.get("reasonCode")
-        time = data_dict.get("time")
+        time_now = int(time.time())
+        print(time_now)
         print(code)
         print(data_dict)
         print(orderReference)
@@ -397,9 +400,10 @@ class WayForPayCallback(APIView):
         response_data = {
             "orderReference": orderReference,
             "status": "accept",
-            "time": time,
+            "time": time_now,
             "signature": generate_response_signature(orderReference, "accept", time, SECRET_KEY)
         }
+        print(response_data)
 
         return Response(response_data)
 
