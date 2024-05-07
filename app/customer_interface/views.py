@@ -15,12 +15,13 @@ from django.views import generic, View
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.status import HTTP_400_BAD_REQUEST
+from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
 
 from .decorators import process_exception
 from .forms import TicketForm, TicketSelectionForm, SearchFlightForm, CreateFlight, FlightFacilitiesFormSet, \
     SearchUserForm
 from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities, Flight, FacilitiesOrder
+from .serializers import WayForPayCallbackSerializer
 from .tasks import send_tickets
 from .utils.ticket_seats import free_seats
 from .utils.wayforpay import create_request_params, send_request, handle_response, generate_response_signature, \
@@ -369,38 +370,44 @@ def buy_order(request, order_id):
 class WayForPayCallback(APIView):
     def post(self, request):
         print(request.data)
-        orderReference = request.data.get("orderReference")
-        status = request.data.get("reasonCode")
-        time = request.data.get("time")
-        signature = request.data.get("signature")
-        order_id = decode_order_reference(orderReference)
-        print(order_id)
-        print(orderReference)
+        serializer = WayForPayCallbackSerializer(data=request.data)
+        if serializer.is_valid():
+            orderReference = serializer.validated_data.get("orderReference")
+            status = serializer.validated_data.get("reasonCode")
+            time = serializer.validated_data.get("time")
+            signature = serializer.validated_data.get("signature")
+            order_id = decode_order_reference(orderReference)
+            print(order_id)
+            print(orderReference)
 
-        # Проверка подлинности запроса
-        expected_signature = generate_hmac(request.data, SECRET_KEY)
-        if signature != expected_signature:
-            return Response({"error": "Invalid signature"}, status=HTTP_400_BAD_REQUEST)
+            # Проверка подлинности запроса
+            expected_signature = generate_hmac(request.data, SECRET_KEY)
+            if signature != expected_signature:
+                return Response({"error": "Invalid signature"}, status=HTTP_400_BAD_REQUEST)
 
-        if status == "1100":
-            order = Order.objects.get(id=order_id)
-            order_tickets = order.tickets.all()
+            if status == "1100":
+                try:
+                    order = Order.objects.get(id=order_id)
+                    order_tickets = order.tickets.all()
 
-            for ticket in order_tickets:
-                ticket.status = 'checked_out'
-                ticket.save()
+                    for ticket in order_tickets:
+                        ticket.status = 'checked_out'
+                        ticket.save()
 
-                send_tickets.apply_async(args=[ticket.id, ticket.order.user.email])
+                        send_tickets.apply_async(args=[ticket.id, ticket.order.user.email])
+                except Order.DoesNotExist:
+                    return Response({"error": "Order does not exist"}, status=HTTP_404_NOT_FOUND)
 
-        # Отправить ответ WayForPay о принятии заказа
-        response_data = {
-            "orderReference": orderReference,
-            "status": "accept",
-            "time": time,
-            "signature": generate_response_signature(orderReference, "accept", time, SECRET_KEY)
-        }
-
-        return Response(response_data)
+            # Отправить ответ WayForPay о принятии заказа
+            response_data = {
+                "orderReference": orderReference,
+                "status": "accept",
+                "time": time,
+                "signature": generate_response_signature(orderReference, "accept", time, SECRET_KEY)
+            }
+            return Response(response_data)
+        else:
+            return Response(serializer.errors, status=HTTP_400_BAD_REQUEST)
 
 
 @permission_required(perm='customer_interface.view_ticket', raise_exception=True)
