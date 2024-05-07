@@ -369,13 +369,15 @@ def buy_order(request, order_id):
 class WayForPayCallback(APIView):
     def post(self, request):
         print(request.data)
-        orderReference = request.POST.get("orderReference")
-        status = request.POST.get("reasonCode")
-        time = request.POST.get("time")
-        signature = request.POST.get("signature")
+        data = request.data.dict()  # Преобразовать QueryDict в обычный словарь
+        orderReference = data.get("orderReference")
+        status = data.get("reasonCode")
+        time = data.get("time")
+        signature = data.get("signature")
+        print(data)
+        print(orderReference)
         order_id = decode_order_reference(orderReference)
         print(order_id)
-        print(orderReference)
 
         # Проверка подлинности запроса
         expected_signature = generate_hmac(request.data, SECRET_KEY)
