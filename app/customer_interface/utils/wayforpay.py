@@ -6,7 +6,7 @@ import hashlib
 import hmac
 
 SECRET_KEY = 'flk3409refn54t54t*FNJRET'
-domain_name = '34.173.108.210'
+domain_name = '34.42.154.179'
 merchantAccount = 'test_merch_n1'
 WAYFORPAY_API = "https://api.wayforpay.com/api"
 
@@ -39,7 +39,7 @@ def create_request_params(price, email, ticket_count, order_id):
         "merchantDomainName": domain_name,
         "apiVersion": 1,
         "language": "en",
-        "serviceUrl": "http://34.173.108.210/api/v1/wayforpay_callback/",
+        "serviceUrl": "http://34.42.154.179/api/v1/wayforpay_callback/",
         "orderReference": orderReference,
         "orderDate": orderDate,
         "amount": price,
