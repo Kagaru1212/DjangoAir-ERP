@@ -1,0 +1,67 @@
+services:
+  django:
+    build: ./app
+    env_file:
+      - .env.dev
+    command: >
+      bash -c "python manage.py makemigrations &&
+               python manage.py migrate &&
+               gunicorn DjangoAir.wsgi:application --bind 0.0.0.0:8000"
+
+    expose:
+      - 8000
+    volumes:
+      - static_volume:/home/app/web/staticfiles
+    depends_on:
+      - pgdb
+      - redis
+      - celery-worker
+    networks:
+      - task-19-djangoair-erp-system-optional
+
+
+  redis:
+    image: "redis:latest"
+    ports:
+      - "6379:6379"
+
+  celery-worker:
+    build: ./app
+    env_file:
+      - .env.dev
+    command: celery -A DjangoAir worker -l INFO
+    depends_on:
+      - redis
+    networks:
+      - task-19-djangoair-erp-system-optional
+
+  pgdb:
+    image: postgres:latest
+    env_file:
+      - .env.dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - my_db:/var/lib/postgresql/data
+    networks:
+      - task-19-djangoair-erp-system-optional
+
+  nginx:
+    build: ./nginx
+    volumes:
+      - static_volume:/home/app/web/staticfiles
+    ports:
+      - "80:80"
+    depends_on:
+      - django
+    networks:
+      - task-19-djangoair-erp-system-optional
+
+
+networks:
+  task-19-djangoair-erp-system-optional:
+    driver: bridge
+
+volumes:
+  my_db:
+  static_volume:

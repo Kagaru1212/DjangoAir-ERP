@@ -20,4 +20,5 @@ urlpatterns = [
     path('users_list/', views.UsersList.as_view(), name='users_list'),
     path('save_user_groups/', views.SaveUserGroupsView.as_view(), name='save_user_groups'),
     path('flight_stats/<int:pk>/', views.flight_stats, name='flight_stats'),
+    path('api/v1/wayforpay_callback/', views.WayForPayCallback.as_view(), name='wayforpay_callback'),
 ]
