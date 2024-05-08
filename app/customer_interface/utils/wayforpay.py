@@ -26,13 +26,13 @@ def generate_response_signature(orderReference, status, time, secret_key):
 
 # Кодирование идентификатора заказа
 def encode_order_reference(order):
-    order_id = int(order) + 10000000
+    order_id = int(order) + 10000111
     return hex(order_id)[2:]
 
 
 # Декодирование идентификатора заказа
 def decode_order_reference(order_id):
-    return int(order_id, 16) - 10000000
+    return int(order_id, 16) - 10000111
 
 
 def create_request_params(price, email, ticket_count, order_id):
