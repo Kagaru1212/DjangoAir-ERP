@@ -1,3 +1,6 @@
+import json
+import time
+
 from datetime import datetime
 from functools import wraps
 
@@ -13,12 +16,18 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.views import generic, View
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.status import HTTP_400_BAD_REQUEST
+
 from .decorators import process_exception
 from .forms import TicketForm, TicketSelectionForm, SearchFlightForm, CreateFlight, FlightFacilitiesFormSet, \
     SearchUserForm
 from .models import Ticket, Order, Basket, TicketFacilities, FlightFacilities, Flight, FacilitiesOrder
 from .tasks import send_tickets
 from .utils.ticket_seats import free_seats
+from .utils.wayforpay import create_request_params, send_request, handle_response, generate_response_signature, \
+    SECRET_KEY, decode_order_reference, generate_hmac
 from .validators import update_ticket_validator, create_ticket_validator
 
 
@@ -347,19 +356,63 @@ def buy_order(request, order_id):
     order_tickets = order.tickets.all()
 
     if request.method == 'POST':
-        for ticket in order_tickets:
-            ticket.status = 'checked_out'
-            ticket.save()
+        request_params = create_request_params(order.price, order.user.email, order_tickets.count(), order_id)
+        response = send_request(request_params)
+        result = handle_response(response)
+        print(result)
 
-            send_tickets.apply_async(args=[ticket.id, ticket.order.user.email])
-
-        # Redirect to the Basket page
         return redirect('customer_interface:basket')
 
     return render(request, 'customer_interface/buy_order.html', {
         'order': order,
         'order_tickets': order_tickets,
     })
+
+
+class WayForPayCallback(APIView):
+    def post(self, request):
+        print(request.data)
+        data_string = list(request.data.keys())[0]
+        data_dict = json.loads(data_string)
+
+        # Доступ к параметру orderReference
+        orderReference = data_dict.get("orderReference")
+        code = data_dict.get("reasonCode")
+        time_now = int(time.time())
+        print(time_now)
+        print(code)
+        print(data_dict)
+        print(orderReference)
+        order_id = decode_order_reference(orderReference)
+        print(order_id)
+
+        if code == 1100:
+            order = Order.objects.get(id=order_id)
+            order_tickets = order.tickets.all()
+
+            for ticket in order_tickets:
+                ticket.status = 'checked_out'
+                ticket.save()
+
+                send_tickets.apply_async(args=[ticket.id, ticket.order.user.email])
+
+        # Отправить ответ WayForPay о принятии заказа
+        response_data = {
+            "orderReference": orderReference,
+            "status": "accept",
+            "time": time_now,
+        }
+
+        data_to_sign = [
+            response_data["orderReference"],
+            response_data["status"],
+            str(response_data["time"]),
+        ]
+        print(response_data)
+        response_data["signature"] = generate_hmac(data_to_sign, SECRET_KEY)
+        print(response_data)
+
+        return Response(response_data)
 
 
 @permission_required(perm='customer_interface.view_ticket', raise_exception=True)
